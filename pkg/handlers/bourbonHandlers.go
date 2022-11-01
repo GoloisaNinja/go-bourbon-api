@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/db"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/models"
+	"github.com/GoloisaNinja/go-bourbon-api/pkg/responses"
 	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -18,26 +19,6 @@ import (
 type BourbonsResponse struct {
 	Bourbons     []models.Bourbon `json:"bourbons"`
 	TotalRecords int              `json:"total_records"`
-}
-
-type ErrorResponse struct {
-	StatusCode   int    `json:"status"`
-	ErrorMessage string `json:"message"`
-}
-
-func GetError(err error, w http.ResponseWriter, e string) {
-	eMap := map[string]int{
-		"badRequest":  http.StatusBadRequest,
-		"notFound":    http.StatusNotFound,
-		"serverError": http.StatusInternalServerError,
-	}
-	var response = ErrorResponse{
-		ErrorMessage: err.Error(),
-		StatusCode:   eMap[e],
-	}
-	message, _ := json.Marshal(response)
-	w.WriteHeader(response.StatusCode)
-	w.Write(message)
 }
 
 // declare and set collections to collection vars
@@ -57,10 +38,9 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 	if q.Get("page") != "" && q.Get("page") != "1" {
 		p, err := strconv.Atoi(q.Get("page"))
 		if err != nil {
-			GetError(
-				err,
-				w,
-				"serverError",
+			responses.RespondWithError(
+				w, http.StatusInternalServerError, "error",
+				err.Error(),
 			)
 			return
 		}
@@ -71,13 +51,19 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 		//r := regexp.MustCompile(`^(?P<S>\w+)_(?P<D>\w+)$`)
 		r, err := regexp.Compile(`^(?P<S>\w+)_(?P<D>\w+)$`)
 		if err != nil {
-			GetError(err, w, "badRequest")
+			responses.RespondWithError(
+				w, http.StatusBadRequest, "error",
+				err.Error(),
+			)
 			return
 		}
 		res := r.FindStringSubmatch(q.Get("sort"))
 		if len(res) == 0 {
-			err := errors.New("Bad Request")
-			GetError(err, w, "badRequest")
+			resLenErr := errors.New("sort params in request were bad")
+			responses.RespondWithError(
+				w, http.StatusBadRequest, "error",
+				resLenErr.Error(),
+			)
 			return
 		}
 		sortIndex := r.SubexpIndex("S")
@@ -129,20 +115,22 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 		filter,
 	)
 	if ctErr != nil {
-		GetError(ctErr, w, "serverError")
+		responses.RespondWithError(
+			w, http.StatusInternalServerError, "error",
+			ctErr.Error(),
+		)
 		return
 	}
 
 	var bourbons []models.Bourbon
-	cursor, err := bourbonCollection.Aggregate(
+	cursor, fetchErr := bourbonCollection.Aggregate(
 		context.TODO(),
 		mongo.Pipeline{matchStage, sortStage, skipStage, limitStage},
 	)
-	if err != nil {
-		GetError(
-			err,
-			w,
-			"badRequest",
+	if fetchErr != nil {
+		responses.RespondWithError(
+			w, http.StatusBadRequest, "error",
+			fetchErr.Error(),
 		)
 		return
 	}
@@ -151,10 +139,9 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 		var bourbon models.Bourbon
 		err := cursor.Decode(&bourbon)
 		if err != nil {
-			GetError(
-				err,
-				w,
-				"serverError",
+			responses.RespondWithError(
+				w, http.StatusInternalServerError, "error",
+				err.Error(),
 			)
 			return
 		}
@@ -164,11 +151,10 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 		)
 	}
 
-	if err := cursor.Err(); err != nil {
-		GetError(
-			err,
-			w,
-			"serverError",
+	if cursErr := cursor.Err(); cursErr != nil {
+		responses.RespondWithError(
+			w, http.StatusInternalServerError, "error",
+			cursErr.Error(),
 		)
 		return
 	}
@@ -177,13 +163,17 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 			Bourbons:     bourbons,
 			TotalRecords: int(count),
 		}
-		json.NewEncoder(w).Encode(bourbonResponse)
+		successResponse := responses.BourbonResponse{
+			Status:  http.StatusOK,
+			Message: "success",
+			Data:    map[string]interface{}{"data": bourbonResponse},
+		}
+		json.NewEncoder(w).Encode(successResponse)
 	} else {
-		err = errors.New("Not Found")
-		GetError(
-			err,
-			w,
-			"notFound",
+		nfError := errors.New("not found")
+		responses.RespondWithError(
+			w, http.StatusNotFound, "error",
+			nfError.Error(),
 		)
 	}
 
@@ -197,10 +187,9 @@ func GetRandomBourbon(w http.ResponseWriter, r *http.Request) {
 		pipeline,
 	)
 	if err != nil {
-		GetError(
-			err,
-			w,
-			"serverError",
+		responses.RespondWithError(
+			w, http.StatusInternalServerError, "error",
+			err.Error(),
 		)
 		return
 	}
@@ -209,30 +198,33 @@ func GetRandomBourbon(w http.ResponseWriter, r *http.Request) {
 	for cursor.Next(context.TODO()) {
 		err := cursor.Decode(&bourbon)
 		if err != nil {
-			GetError(
-				err,
-				w,
-				"serverError",
+			responses.RespondWithError(
+				w, http.StatusInternalServerError, "error",
+				err.Error(),
 			)
 			return
 		}
 	}
 	if err := cursor.Err(); err != nil {
-		GetError(
-			err,
-			w,
-			"serverError",
+		responses.RespondWithError(
+			w, http.StatusInternalServerError, "error",
+			err.Error(),
 		)
 		return
 	}
 	if bourbon.Title != "" {
-		json.NewEncoder(w).Encode(bourbon)
+		json.NewEncoder(w).Encode(
+			responses.BourbonResponse{
+				Status:  http.StatusOK,
+				Message: "success",
+				Data:    map[string]interface{}{"data": bourbon},
+			},
+		)
 	} else {
-		err = errors.New("Not Found")
-		GetError(
-			err,
-			w,
-			"notFound",
+		err = errors.New("not found")
+		responses.RespondWithError(
+			w, http.StatusNotFound, "error",
+			err.Error(),
 		)
 	}
 
@@ -245,10 +237,9 @@ func GetBourbonById(w http.ResponseWriter, r *http.Request) {
 	// convert id string to ObjectId
 	objectId, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
-		GetError(
-			err,
-			w,
-			"badRequest",
+		responses.RespondWithError(
+			w, http.StatusInternalServerError, "error",
+			err.Error(),
 		)
 		return
 	}
@@ -259,21 +250,26 @@ func GetBourbonById(w http.ResponseWriter, r *http.Request) {
 		filter,
 	).Decode(&bourbon)
 	if err != nil {
-		GetError(
-			err,
-			w,
-			"badRequest",
+		responses.RespondWithError(
+			w, http.StatusBadRequest, "error",
+			err.Error(),
 		)
 		return
 	}
 	if bourbon.Title != "" {
-		json.NewEncoder(w).Encode(bourbon)
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(
+			responses.BourbonResponse{
+				Status:  http.StatusOK,
+				Message: "success",
+				Data:    map[string]interface{}{"data": bourbon},
+			},
+		)
 	} else {
-		err = errors.New("Not Found")
-		GetError(
-			err,
-			w,
-			"notFound",
+		err = errors.New("not found")
+		responses.RespondWithError(
+			w, http.StatusNotFound, "error",
+			err.Error(),
 		)
 	}
 
