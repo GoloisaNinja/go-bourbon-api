@@ -3,25 +3,16 @@ package db
 import (
 	"context"
 	"fmt"
-	"github.com/joho/godotenv"
+	"github.com/GoloisaNinja/go-bourbon-api/pkg/helpers"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
-	"os"
 	"time"
 )
 
-func getGoDotEnv(key string) string {
-	err := godotenv.Load(".env")
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
-	return os.Getenv(key)
-}
-
 // Connection URI
-var uri = getGoDotEnv("PROD_MONGODB_URI")
-var testUri = getGoDotEnv("DEV_MONGODB_URI")
+var uri = helpers.GetGoDotEnv("PROD_MONGODB_URI")
+var testUri = helpers.GetGoDotEnv("DEV_MONGODB_URI")
 
 func ConnectDB() *mongo.Client {
 	client, err := mongo.NewClient(options.Client().ApplyURI(testUri))

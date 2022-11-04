@@ -6,12 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/db"
+	"github.com/GoloisaNinja/go-bourbon-api/pkg/helpers"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/models"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/responses"
+	"github.com/golang-jwt/jwt"
 	"go.mongodb.org/mongo-driver/bson"
 	"golang.org/x/crypto/bcrypt"
 	"io/ioutil"
 	"net/http"
+	"time"
 )
 
 // declare and set collections to collection vars
@@ -19,6 +22,29 @@ var usersCollection = db.GetCollection(
 	db.DB,
 	"users",
 )
+
+type JWTCustomClaims struct {
+	UserId string
+	jwt.StandardClaims
+}
+
+func GenerateAuthToken(userId string) (string, error) {
+	jwtSecret := []byte(helpers.GetGoDotEnv("JWT_SECRET"))
+	t := time.Now()
+	claims := JWTCustomClaims{
+		userId,
+		jwt.StandardClaims{
+			Issuer:   "helloBourbon",
+			IssuedAt: t.Unix(),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(jwtSecret)
+	if err != nil {
+		return "", err
+	}
+	return tokenString, err
+}
 
 func verifyPasswordHash(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
@@ -58,9 +84,10 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-	userFromReq := r.Context().Value("user")
-	newUser := userFromReq.(*models.User)
-	_, err := usersCollection.InsertOne(context.TODO(), userFromReq)
+	userFromCtx := r.Context().Value("user")
+	newUser := userFromCtx.(*models.User)
+	tokenFromCtx := newUser.Tokens[0].Token
+	_, err := usersCollection.InsertOne(context.TODO(), userFromCtx)
 	if err != nil {
 		responses.RespondWithError(
 			w, http.StatusInternalServerError, "error",
@@ -70,7 +97,7 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	cleanResponse := responses.CleanUserResponse{
 		User:  newUser,
-		Token: "fake-token-for-now",
+		Token: tokenFromCtx,
 	}
 	json.NewEncoder(w).Encode(
 		responses.UserResponse{
@@ -112,9 +139,32 @@ func LoginUser(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
+	token, tErr := GenerateAuthToken(verifiedUser.ID.Hex())
+	if tErr != nil {
+		responses.RespondWithError(
+			w, http.StatusInternalServerError,
+			"error", tErr.Error(),
+		)
+		return
+	}
+	dbToken := models.UserTokenRef{
+		Token: token,
+	}
+	filter := bson.M{"_id": verifiedUser.ID}
+	tokenUpdate := bson.M{"$push": bson.M{"tokens": dbToken}}
+	_, updateErr := usersCollection.UpdateOne(
+		context.TODO(), filter,
+		tokenUpdate,
+	)
+	if updateErr != nil {
+		responses.RespondWithError(
+			w, http.StatusInternalServerError,
+			"error", updateErr.Error(),
+		)
+	}
 	cleanResponse := responses.CleanUserResponse{
 		User:  verifiedUser,
-		Token: "fake-Login-token-for-now",
+		Token: token,
 	}
 	json.NewEncoder(w).Encode(
 		responses.UserResponse{

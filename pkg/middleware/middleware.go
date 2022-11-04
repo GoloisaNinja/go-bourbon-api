@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/db"
+	"github.com/GoloisaNinja/go-bourbon-api/pkg/handlers"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/models"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/responses"
 	"go.mongodb.org/mongo-driver/bson"
@@ -75,6 +76,7 @@ func NewUserMiddleware(next http.Handler) http.Handler {
 					"error", hashErr.Error(),
 				)
 			}
+
 			var newUser models.User
 			newUser.ID = primitive.NewObjectID()
 			newUser.Username = reqResult.Username
@@ -83,7 +85,20 @@ func NewUserMiddleware(next http.Handler) http.Handler {
 			newUser.Collections = make([]*models.UserCollectionRef, 0)
 			newUser.Reviews = make([]*models.UserReviewRef, 0)
 			newUser.Wishlists = make([]*models.UserWishlistRef, 0)
-			newUser.Tokens = make([]*models.UserTokenRef, 0)
+			// generate JWT
+			token, tErr := handlers.GenerateAuthToken(newUser.ID.Hex())
+			if tErr != nil {
+				responses.RespondWithError(
+					w, http.StatusInternalServerError,
+					"error", tErr.Error(),
+				)
+				return
+			}
+			newUser.Tokens = append(
+				newUser.Tokens, &models.UserTokenRef{
+					Token: token,
+				},
+			)
 			ctx := context.WithValue(r.Context(), "user", &newUser)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		},
