@@ -11,6 +11,7 @@ import (
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/responses"
 	"github.com/golang-jwt/jwt"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/crypto/bcrypt"
 	"io/ioutil"
 	"net/http"
@@ -173,4 +174,32 @@ func LoginUser(w http.ResponseWriter, r *http.Request) {
 			Data:    map[string]interface{}{"data": cleanResponse},
 		},
 	)
+}
+
+func LogoutUser(w http.ResponseWriter, r *http.Request) {
+	authFromCtx := r.Context().Value("authContext")
+	auth := authFromCtx.(*models.AuthContext)
+	id, _ := primitive.ObjectIDFromHex(auth.UserId)
+	t := auth.Token
+	filter := bson.D{{"_id", id}, {"tokens.token", t}}
+	update := bson.M{"$pull": bson.M{"tokens": bson.D{{"token", t}}}}
+	result, err := usersCollection.UpdateOne(context.TODO(), filter, update)
+	if err != nil {
+		responses.RespondWithError(
+			w, http.StatusBadRequest, "error", err.Error(),
+		)
+		return
+	}
+	if result.MatchedCount != 1 {
+		responses.RespondWithError(
+			w, http.StatusBadRequest, "error",
+			"bad request",
+		)
+		return
+	}
+	type response struct {
+		Status  int
+		Message string
+	}
+	json.NewEncoder(w).Encode(response{Status: 200, Message: "logged out"})
 }

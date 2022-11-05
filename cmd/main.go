@@ -42,9 +42,12 @@ func main() {
 	//r.HandleFunc("/api/user", handlers.CreateUser).Methods("GET")
 	// create and login a new user
 	newUserHandler := http.HandlerFunc(handlers.CreateUser)
+	logoutUserHander := http.HandlerFunc(handlers.LogoutUser)
 	r.Handle("/api/user", middleware.NewUserMiddleware(newUserHandler))
 	// login an existing user
 	r.HandleFunc("/api/user/login", handlers.LoginUser).Methods("GET")
+	// logout a user
+	r.Handle("/api/user/logout", middleware.AuthMiddleware(logoutUserHander))
 	// set our port address
 	fmt.Println("Server is up at port 5000")
 	log.Fatal(http.ListenAndServe(":5000", r))
