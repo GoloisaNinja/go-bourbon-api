@@ -163,7 +163,7 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 			Bourbons:     bourbons,
 			TotalRecords: int(count),
 		}
-		successResponse := responses.BourbonResponse{
+		successResponse := responses.StandardResponse{
 			Status:  http.StatusOK,
 			Message: "success",
 			Data:    map[string]interface{}{"data": bourbonResponse},
@@ -214,7 +214,7 @@ func GetRandomBourbon(w http.ResponseWriter, r *http.Request) {
 	}
 	if bourbon.Title != "" {
 		json.NewEncoder(w).Encode(
-			responses.BourbonResponse{
+			responses.StandardResponse{
 				Status:  http.StatusOK,
 				Message: "success",
 				Data:    map[string]interface{}{"data": bourbon},
@@ -259,7 +259,7 @@ func GetBourbonById(w http.ResponseWriter, r *http.Request) {
 	if bourbon.Title != "" {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(
-			responses.BourbonResponse{
+			responses.StandardResponse{
 				Status:  http.StatusOK,
 				Message: "success",
 				Data:    map[string]interface{}{"data": bourbon},

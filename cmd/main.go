@@ -48,6 +48,11 @@ func main() {
 	r.HandleFunc("/api/user/login", handlers.LoginUser).Methods("GET")
 	// logout a user
 	r.Handle("/api/user/logout", middleware.AuthMiddleware(logoutUserHander))
+	// collection routes - all authenticated routes?
+	createCollectionHandler := http.HandlerFunc(handlers.CreateCollection)
+	r.Handle(
+		"/api/collection", middleware.AuthMiddleware(createCollectionHandler),
+	)
 	// set our port address
 	fmt.Println("Server is up at port 5000")
 	log.Fatal(http.ListenAndServe(":5000", r))

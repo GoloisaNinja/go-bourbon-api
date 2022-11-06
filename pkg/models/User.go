@@ -3,9 +3,9 @@ package models
 import "go.mongodb.org/mongo-driver/bson/primitive"
 
 type UserCollectionRef struct {
-	CollectionID   string         `bson:"collection_id" json:"collection_id"`
-	CollectionName string         `bson:"collection_name" json:"collection_name"`
-	Bourbons       *[]BourbonsRef `bson:"bourbons" json:"bourbons"`
+	CollectionID   primitive.ObjectID `bson:"collection_id" json:"collection_id"`
+	CollectionName string             `bson:"collection_name" json:"collection_name"`
+	Bourbons       []*BourbonsRef     `bson:"bourbons" json:"bourbons"`
 }
 
 type UserReviewRef struct {

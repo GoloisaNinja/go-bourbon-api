@@ -101,7 +101,7 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		Token: tokenFromCtx,
 	}
 	json.NewEncoder(w).Encode(
-		responses.UserResponse{
+		responses.StandardResponse{
 			Status:  http.StatusOK,
 			Message: "success",
 			Data:    map[string]interface{}{"data": cleanResponse},
@@ -168,7 +168,7 @@ func LoginUser(w http.ResponseWriter, r *http.Request) {
 		Token: token,
 	}
 	json.NewEncoder(w).Encode(
-		responses.UserResponse{
+		responses.StandardResponse{
 			Status:  http.StatusOK,
 			Message: "success",
 			Data:    map[string]interface{}{"data": cleanResponse},
@@ -177,6 +177,13 @@ func LoginUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func LogoutUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		responses.RespondWithError(
+			w, http.StatusMethodNotAllowed, "method not allowed",
+			"request method not allowed on this endpoint",
+		)
+		return
+	}
 	authFromCtx := r.Context().Value("authContext")
 	auth := authFromCtx.(*models.AuthContext)
 	id, _ := primitive.ObjectIDFromHex(auth.UserId)
