@@ -22,7 +22,7 @@ type BourbonsResponse struct {
 }
 
 // declare and set collections to collection vars
-var bourbonCollection = db.GetCollection(
+var bourbonsCollection = db.GetCollection(
 	db.DB,
 	"bourbons",
 )
@@ -110,7 +110,7 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 	sortStage := bson.D{{"$sort", bson.D{{sortQuery, sortDirection}}}}
 	skipStage := bson.D{{"$skip", skip}}
 	limitStage := bson.D{{"$limit", limit}}
-	count, ctErr := bourbonCollection.CountDocuments(
+	count, ctErr := bourbonsCollection.CountDocuments(
 		context.TODO(),
 		filter,
 	)
@@ -123,7 +123,7 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var bourbons []models.Bourbon
-	cursor, fetchErr := bourbonCollection.Aggregate(
+	cursor, fetchErr := bourbonsCollection.Aggregate(
 		context.TODO(),
 		mongo.Pipeline{matchStage, sortStage, skipStage, limitStage},
 	)
@@ -182,7 +182,7 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 // GetRandomBourbon gets a random bourbon from the db using a aggregation pipe $sample
 func GetRandomBourbon(w http.ResponseWriter, r *http.Request) {
 	pipeline := []bson.M{bson.M{"$sample": bson.M{"size": 1}}}
-	cursor, err := bourbonCollection.Aggregate(
+	cursor, err := bourbonsCollection.Aggregate(
 		context.TODO(),
 		pipeline,
 	)
@@ -245,7 +245,7 @@ func GetBourbonById(w http.ResponseWriter, r *http.Request) {
 	}
 	filter := bson.M{"_id": objectId}
 	var bourbon models.Bourbon
-	err = bourbonCollection.FindOne(
+	err = bourbonsCollection.FindOne(
 		context.TODO(),
 		filter,
 	).Decode(&bourbon)

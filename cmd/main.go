@@ -42,16 +42,20 @@ func main() {
 	//r.HandleFunc("/api/user", handlers.CreateUser).Methods("GET")
 	// create and login a new user
 	newUserHandler := http.HandlerFunc(handlers.CreateUser)
-	logoutUserHander := http.HandlerFunc(handlers.LogoutUser)
+	logoutUserHandler := http.HandlerFunc(handlers.LogoutUser)
 	r.Handle("/api/user", middleware.NewUserMiddleware(newUserHandler))
 	// login an existing user
 	r.HandleFunc("/api/user/login", handlers.LoginUser).Methods("GET")
 	// logout a user
-	r.Handle("/api/user/logout", middleware.AuthMiddleware(logoutUserHander))
+	r.Handle("/api/user/logout", middleware.AuthMiddleware(logoutUserHandler))
 	// collection routes - all authenticated routes?
 	createCollectionHandler := http.HandlerFunc(handlers.CreateCollection)
+	addBourbonToCollectionHandler := http.HandlerFunc(handlers.AddBourbonToCollection)
 	r.Handle(
 		"/api/collection", middleware.AuthMiddleware(createCollectionHandler),
+	)
+	r.Handle(
+		"/api/collection/add/{id}", middleware.AuthMiddleware(addBourbonToCollectionHandler),
 	)
 	// set our port address
 	fmt.Println("Server is up at port 5000")
