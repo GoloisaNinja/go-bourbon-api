@@ -50,10 +50,17 @@ func main() {
 	r.Handle("/api/user/logout", middleware.AuthMiddleware(logoutUserHandler))
 	// collection routes - all authenticated routes?
 	createCollectionHandler := http.HandlerFunc(handlers.CreateCollection)
+	deleteCollectionHandler := http.HandlerFunc(handlers.DeleteCollection)
 	addBourbonToCollectionHandler := http.HandlerFunc(handlers.AddBourbonToCollection)
+	// create a new collection
 	r.Handle(
 		"/api/collection", middleware.AuthMiddleware(createCollectionHandler),
 	)
+	// delete an existing collection
+	r.Handle(
+		"/api/collection/{id}", middleware.AuthMiddleware(deleteCollectionHandler),
+	)
+	// add a bourbon by id into a collection and a usercollectionref
 	r.Handle(
 		"/api/collection/add/{id}", middleware.AuthMiddleware(addBourbonToCollectionHandler),
 	)

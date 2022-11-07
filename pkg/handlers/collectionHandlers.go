@@ -140,6 +140,63 @@ func CreateCollection(w http.ResponseWriter, r *http.Request) {
 	)
 }
 
+// DeleteCollection deletes a collection from the collections
+// collection and from the user collection reference - the collection
+// must belong to the user that is requesting the deletion
+func DeleteCollection(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "DELETE" {
+		responses.RespondWithError(
+			w, http.StatusMethodNotAllowed, "method not allowed",
+			"request method not allowed on this endpoint",
+		)
+		return
+	}
+	// params id contains collection id
+	params := mux.Vars(r)
+	collectionId, _ := primitive.ObjectIDFromHex(params["id"])
+	// user id is in the context from auth middleware
+	userId, uErr := helpers.GetUserIdFromAuthCtx(r.Context())
+	if uErr != nil {
+		responses.RespondWithError(w, http.StatusInternalServerError, "error", uErr.Error())
+		return
+	}
+	// deleting the collection document entirely
+	cFilter := bson.M{"_id": collectionId}
+	result, err := collectionsCollection.DeleteOne(context.TODO(), cFilter)
+	if err != nil {
+		responses.RespondWithError(w, http.StatusBadRequest, "error", err.Error())
+		return
+	}
+	// we didn't find a collection with the param collection belonging to
+	// the authorized user making the request
+	if result.DeletedCount == 0 {
+		responses.RespondWithError(w, http.StatusBadRequest, "error", "bad request")
+		return
+	}
+	// delete the collectionRef from the user document
+	// and return the updated user object doc
+	var updatedUser models.User
+	uFilter := bson.M{"_id": userId, "collections.collection_id": collectionId}
+	update := bson.M{"$pull": bson.D{{"collections", bson.D{{"collection_id", collectionId}}}}}
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	uUpErr := usersCollection.FindOneAndUpdate(context.TODO(), uFilter, update, opts).Decode(&updatedUser)
+	if uUpErr != nil {
+		responses.RespondWithError(w, http.StatusUnauthorized, "error", "unauthorized")
+		return
+	}
+	json.NewEncoder(w).Encode(responses.StandardResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"data": updatedUser.Collections},
+	})
+}
+
+// AddBourbonToCollection route relies on the auth middleware to
+// get us the auth context, we then get the collection id from the
+// router params and the bourbon id from the request body
+// we check various conditional control flows before finally adding
+// the request bourbon into the collection document and into the user
+// collections reference document
 func AddBourbonToCollection(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		responses.RespondWithError(
