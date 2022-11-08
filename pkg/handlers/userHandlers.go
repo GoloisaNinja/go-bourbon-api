@@ -78,13 +78,6 @@ func findByCredentials(email, password string) (
 }
 
 func CreateUser(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		responses.RespondWithError(
-			w, http.StatusMethodNotAllowed, "method not allowed",
-			"request method not allowed on this endpoint",
-		)
-		return
-	}
 	userFromCtx := r.Context().Value("user")
 	newUser := userFromCtx.(*models.User)
 	tokenFromCtx := newUser.Tokens[0].Token
@@ -177,13 +170,6 @@ func LoginUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func LogoutUser(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		responses.RespondWithError(
-			w, http.StatusMethodNotAllowed, "method not allowed",
-			"request method not allowed on this endpoint",
-		)
-		return
-	}
 	authFromCtx := r.Context().Value("authContext")
 	auth := authFromCtx.(*models.AuthContext)
 	id, _ := primitive.ObjectIDFromHex(auth.UserId)

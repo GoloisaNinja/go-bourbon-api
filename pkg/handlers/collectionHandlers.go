@@ -69,16 +69,42 @@ func newCollectionConstructor(
 	}
 }
 
+// GetCollectionById returns a collection - if the collection is
+// private then the user making the request must be the owner of
+// the collection
+func GetCollectionById(w http.ResponseWriter, r *http.Request) {
+	// params id contains collection id
+	params := mux.Vars(r)
+	collectionId, _ := primitive.ObjectIDFromHex(params["id"])
+	// auth middleware context - need user id to continue
+	id, iErr := helpers.GetUserIdFromAuthCtx(r.Context())
+	if iErr != nil {
+		responses.RespondWithError(w, http.StatusInternalServerError, "error", iErr.Error())
+		return
+	}
+	var collection models.Collection
+	filter := bson.M{"_id": collectionId}
+	err := collectionsCollection.FindOne(context.TODO(), filter).Decode(&collection)
+	if err != nil {
+		responses.RespondWithError(w, http.StatusBadRequest, "error", "bad request")
+		return
+	}
+	if collection.Private {
+		if collection.User.ID != id {
+			responses.RespondWithError(w, http.StatusUnauthorized, "error", "unauthorized")
+			return
+		}
+	}
+	json.NewEncoder(w).Encode(responses.StandardResponse{
+		Status:  http.StatusOK,
+		Message: "success",
+		Data:    map[string]interface{}{"data": collection},
+	})
+}
+
 // CreateCollection creates a new collection in the collections collection
 // and also adds a UserCollectionRef to the User that created it
 func CreateCollection(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		responses.RespondWithError(
-			w, http.StatusMethodNotAllowed, "method not allowed",
-			"request method not allowed on this endpoint",
-		)
-		return
-	}
 	// auth middleware context - need user id to continue
 	id, iErr := helpers.GetUserIdFromAuthCtx(r.Context())
 	if iErr != nil {
@@ -144,13 +170,6 @@ func CreateCollection(w http.ResponseWriter, r *http.Request) {
 // collection and from the user collection reference - the collection
 // must belong to the user that is requesting the deletion
 func DeleteCollection(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "DELETE" {
-		responses.RespondWithError(
-			w, http.StatusMethodNotAllowed, "method not allowed",
-			"request method not allowed on this endpoint",
-		)
-		return
-	}
 	// params id contains collection id
 	params := mux.Vars(r)
 	collectionId, _ := primitive.ObjectIDFromHex(params["id"])
@@ -176,8 +195,8 @@ func DeleteCollection(w http.ResponseWriter, r *http.Request) {
 	// delete the collectionRef from the user document
 	// and return the updated user object doc
 	var updatedUser models.User
-	uFilter := bson.M{"_id": userId, "collections.collection_id": collectionId}
-	update := bson.M{"$pull": bson.D{{"collections", bson.D{{"collection_id", collectionId}}}}}
+	uFilter := bson.M{"_id": userId}
+	update := bson.M{"$pull": bson.M{"collections": bson.M{"collection_id": collectionId}}}
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
 	uUpErr := usersCollection.FindOneAndUpdate(context.TODO(), uFilter, update, opts).Decode(&updatedUser)
 	if uUpErr != nil {
@@ -198,13 +217,6 @@ func DeleteCollection(w http.ResponseWriter, r *http.Request) {
 // the request bourbon into the collection document and into the user
 // collections reference document
 func AddBourbonToCollection(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		responses.RespondWithError(
-			w, http.StatusMethodNotAllowed, "method not allowed",
-			"request method not allowed on this endpoint",
-		)
-		return
-	}
 	// params id contains collection id
 	params := mux.Vars(r)
 	collectionId, _ := primitive.ObjectIDFromHex(params["id"])

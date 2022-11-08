@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"github.com/GoloisaNinja/go-bourbon-api/pkg/config"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/helpers"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -14,8 +15,17 @@ import (
 var uri = helpers.GetGoDotEnv("PROD_MONGODB_URI")
 var testUri = helpers.GetGoDotEnv("DEV_MONGODB_URI")
 
+var app config.AppConfig
+
 func ConnectDB() *mongo.Client {
-	client, err := mongo.NewClient(options.Client().ApplyURI(testUri))
+	app.IsProduction = false
+	var uriToUse string
+	if app.IsProduction {
+		uriToUse = uri
+	} else {
+		uriToUse = testUri
+	}
+	client, err := mongo.NewClient(options.Client().ApplyURI(uriToUse))
 	if err != nil {
 		log.Fatal(err)
 	}
