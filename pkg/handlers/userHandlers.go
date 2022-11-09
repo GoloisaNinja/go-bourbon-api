@@ -83,23 +83,16 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 	tokenFromCtx := newUser.Tokens[0].Token
 	_, err := usersCollection.InsertOne(context.TODO(), userFromCtx)
 	if err != nil {
-		responses.RespondWithError(
-			w, http.StatusInternalServerError, "error",
-			err.Error(),
-		)
+		var er responses.ErrorResponse
+		er.Respond(w, 500, "error", err.Error())
 		return
 	}
 	cleanResponse := responses.CleanUserResponse{
 		User:  newUser,
 		Token: tokenFromCtx,
 	}
-	json.NewEncoder(w).Encode(
-		responses.StandardResponse{
-			Status:  http.StatusOK,
-			Message: "success",
-			Data:    map[string]interface{}{"data": cleanResponse},
-		},
-	)
+	var ur responses.StandardResponse
+	ur.Respond(w, 200, "success", cleanResponse)
 }
 
 func LoginUser(w http.ResponseWriter, r *http.Request) {
@@ -107,38 +100,30 @@ func LoginUser(w http.ResponseWriter, r *http.Request) {
 	var req models.UserLoginRequest
 	reqErr := json.Unmarshal(reqBody, &req)
 	if reqErr != nil {
-		responses.RespondWithError(
-			w, http.StatusBadRequest, "error",
-			reqErr.Error(),
-		)
+		var er responses.ErrorResponse
+		er.Respond(w, 400, "error", reqErr.Error())
 		return
 	}
 	if req.Email == "" || req.
 		Password == "" {
-		missingCreds := errors.New("bad request")
-		responses.RespondWithError(
-			w, http.StatusBadRequest, "error",
-			missingCreds.Error(),
-		)
+		missing := errors.New("bad request")
+		var er responses.ErrorResponse
+		er.Respond(w, 500, "error", missing.Error())
 		return
 	}
-	verifiedUser, validationError := findByCredentials(
+	verifiedUser, vError := findByCredentials(
 		req.Email,
 		req.Password,
 	)
-	if validationError != nil {
-		responses.RespondWithError(
-			w, http.StatusUnauthorized,
-			"unauthorized", "bad email or password",
-		)
+	if vError != nil {
+		var er responses.ErrorResponse
+		er.Respond(w, 401, "error", vError.Error())
 		return
 	}
 	token, tErr := GenerateAuthToken(verifiedUser.ID.Hex())
 	if tErr != nil {
-		responses.RespondWithError(
-			w, http.StatusInternalServerError,
-			"error", tErr.Error(),
-		)
+		var er responses.ErrorResponse
+		er.Respond(w, 500, "error", tErr.Error())
 		return
 	}
 	dbToken := models.UserTokenRef{
@@ -146,27 +131,20 @@ func LoginUser(w http.ResponseWriter, r *http.Request) {
 	}
 	filter := bson.M{"_id": verifiedUser.ID}
 	tokenUpdate := bson.M{"$push": bson.M{"tokens": dbToken}}
-	_, updateErr := usersCollection.UpdateOne(
+	_, uErr := usersCollection.UpdateOne(
 		context.TODO(), filter,
 		tokenUpdate,
 	)
-	if updateErr != nil {
-		responses.RespondWithError(
-			w, http.StatusInternalServerError,
-			"error", updateErr.Error(),
-		)
+	if uErr != nil {
+		var er responses.ErrorResponse
+		er.Respond(w, 500, "error", uErr.Error())
 	}
 	cleanResponse := responses.CleanUserResponse{
 		User:  verifiedUser,
 		Token: token,
 	}
-	json.NewEncoder(w).Encode(
-		responses.StandardResponse{
-			Status:  http.StatusOK,
-			Message: "success",
-			Data:    map[string]interface{}{"data": cleanResponse},
-		},
-	)
+	var ur responses.StandardResponse
+	ur.Respond(w, 200, "success", cleanResponse)
 }
 
 func LogoutUser(w http.ResponseWriter, r *http.Request) {
@@ -178,21 +156,15 @@ func LogoutUser(w http.ResponseWriter, r *http.Request) {
 	update := bson.M{"$pull": bson.M{"tokens": bson.D{{"token", t}}}}
 	result, err := usersCollection.UpdateOne(context.TODO(), filter, update)
 	if err != nil {
-		responses.RespondWithError(
-			w, http.StatusBadRequest, "error", err.Error(),
-		)
+		var er responses.ErrorResponse
+		er.Respond(w, 400, "error", err.Error())
 		return
 	}
 	if result.MatchedCount != 1 {
-		responses.RespondWithError(
-			w, http.StatusBadRequest, "error",
-			"bad request",
-		)
+		var er responses.ErrorResponse
+		er.Respond(w, 400, "error", "bad request")
 		return
 	}
-	type response struct {
-		Status  int
-		Message string
-	}
-	json.NewEncoder(w).Encode(response{Status: 200, Message: "logged out"})
+	var ur responses.StandardResponse
+	ur.Respond(w, 200, "logged out", "logout successful")
 }

@@ -48,10 +48,8 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			// token is formatted as "Bearer: <token>"
 			x, err := regexp.Compile(`^(?P<B>Bearer\s+)(?P<T>.*)$`)
 			if err != nil {
-				responses.RespondWithError(
-					w, http.StatusUnauthorized,
-					"error", "unauthorized",
-				)
+				var er responses.ErrorResponse
+				er.Respond(w, 401, "error", "unauthorized")
 				return
 			}
 			authHeader := x.FindStringSubmatch(r.Header.Get("Authorization"))
@@ -70,10 +68,8 @@ func AuthMiddleware(next http.Handler) http.Handler {
 				},
 			)
 			if vErr != nil {
-				responses.RespondWithError(
-					w, http.StatusUnauthorized,
-					"error", "unauthorized",
-				)
+				var er responses.ErrorResponse
+				er.Respond(w, 401, "error", "unauthorized")
 				return
 			}
 			var userId string
@@ -99,36 +95,28 @@ func NewUserMiddleware(next http.Handler) http.Handler {
 			// try to unmarshal the request
 			err := json.Unmarshal(reqBody, &reqResult)
 			if err != nil {
-				responses.RespondWithError(
-					w, http.StatusBadRequest, "error",
-					err.Error(),
-				)
+				var er responses.ErrorResponse
+				er.Respond(w, 400, "error", err.Error())
 				return
 			}
 			// check if the request had empty body
 			if reqResult.Email == "" || reqResult.Password == "" {
-				responses.RespondWithError(
-					w, http.StatusBadRequest, "error",
-					err.Error(),
-				)
+				var er responses.ErrorResponse
+				er.Respond(w, 400, "error", err.Error())
 				return
 			}
 			validEmail := isValidEmail(reqResult.Email)
 			alreadyExists := isExistingUser(reqResult.Email)
 			if !validEmail || alreadyExists {
-				responses.RespondWithError(
-					w, http.StatusBadRequest, "error",
-					"bad user or email",
-				)
+				var er responses.ErrorResponse
+				er.Respond(w, 400, "error", "user or email invalid")
 				return
 			}
 			// hash new user password from request
 			hashed, hashErr := hashPassword(reqResult.Password)
 			if hashErr != nil {
-				responses.RespondWithError(
-					w, http.StatusInternalServerError,
-					"error", hashErr.Error(),
-				)
+				var er responses.ErrorResponse
+				er.Respond(w, 500, "error", hashErr.Error())
 			}
 
 			var newUser models.User
@@ -142,10 +130,8 @@ func NewUserMiddleware(next http.Handler) http.Handler {
 			// generate JWT
 			token, tErr := handlers.GenerateAuthToken(newUser.ID.Hex())
 			if tErr != nil {
-				responses.RespondWithError(
-					w, http.StatusInternalServerError,
-					"error", tErr.Error(),
-				)
+				var er responses.ErrorResponse
+				er.Respond(w, 500, "error", tErr.Error())
 				return
 			}
 			newUser.Tokens = append(

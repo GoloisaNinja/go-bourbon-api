@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/db"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/models"
@@ -38,10 +37,8 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 	if q.Get("page") != "" && q.Get("page") != "1" {
 		p, err := strconv.Atoi(q.Get("page"))
 		if err != nil {
-			responses.RespondWithError(
-				w, http.StatusInternalServerError, "error",
-				err.Error(),
-			)
+			var er responses.ErrorResponse
+			er.Respond(w, 500, "error", err.Error())
 			return
 		}
 		page = p
@@ -51,19 +48,15 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 		//r := regexp.MustCompile(`^(?P<S>\w+)_(?P<D>\w+)$`)
 		r, err := regexp.Compile(`^(?P<S>\w+)_(?P<D>\w+)$`)
 		if err != nil {
-			responses.RespondWithError(
-				w, http.StatusBadRequest, "error",
-				err.Error(),
-			)
+			var er responses.ErrorResponse
+			er.Respond(w, 400, "error", err.Error())
 			return
 		}
 		res := r.FindStringSubmatch(q.Get("sort"))
 		if len(res) == 0 {
 			resLenErr := errors.New("sort params in request were bad")
-			responses.RespondWithError(
-				w, http.StatusBadRequest, "error",
-				resLenErr.Error(),
-			)
+			var er responses.ErrorResponse
+			er.Respond(w, 400, "error", resLenErr.Error())
 			return
 		}
 		sortIndex := r.SubexpIndex("S")
@@ -115,10 +108,8 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 		filter,
 	)
 	if ctErr != nil {
-		responses.RespondWithError(
-			w, http.StatusInternalServerError, "error",
-			ctErr.Error(),
-		)
+		var er responses.ErrorResponse
+		er.Respond(w, 500, "error", ctErr.Error())
 		return
 	}
 
@@ -128,10 +119,8 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 		mongo.Pipeline{matchStage, sortStage, skipStage, limitStage},
 	)
 	if fetchErr != nil {
-		responses.RespondWithError(
-			w, http.StatusBadRequest, "error",
-			fetchErr.Error(),
-		)
+		var er responses.ErrorResponse
+		er.Respond(w, 500, "error", fetchErr.Error())
 		return
 	}
 	defer cursor.Close(context.TODO())
@@ -139,10 +128,8 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 		var bourbon models.Bourbon
 		err := cursor.Decode(&bourbon)
 		if err != nil {
-			responses.RespondWithError(
-				w, http.StatusInternalServerError, "error",
-				err.Error(),
-			)
+			var er responses.ErrorResponse
+			er.Respond(w, 500, "error", err.Error())
 			return
 		}
 		bourbons = append(
@@ -152,29 +139,21 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if cursErr := cursor.Err(); cursErr != nil {
-		responses.RespondWithError(
-			w, http.StatusInternalServerError, "error",
-			cursErr.Error(),
-		)
+		var er responses.ErrorResponse
+		er.Respond(w, 500, "error", cursErr.Error())
 		return
 	}
 	if len(bourbons) > 0 {
-		bourbonResponse := BourbonsResponse{
+		br := BourbonsResponse{
 			Bourbons:     bourbons,
 			TotalRecords: int(count),
 		}
-		successResponse := responses.StandardResponse{
-			Status:  http.StatusOK,
-			Message: "success",
-			Data:    map[string]interface{}{"data": bourbonResponse},
-		}
-		json.NewEncoder(w).Encode(successResponse)
+		var successResponse responses.StandardResponse
+		successResponse.Respond(w, 200, "success", br)
 	} else {
+		var errResponse responses.ErrorResponse
 		nfError := errors.New("not found")
-		responses.RespondWithError(
-			w, http.StatusNotFound, "error",
-			nfError.Error(),
-		)
+		errResponse.Respond(w, 404, "error", nfError.Error())
 	}
 
 }
@@ -187,10 +166,8 @@ func GetRandomBourbon(w http.ResponseWriter, r *http.Request) {
 		pipeline,
 	)
 	if err != nil {
-		responses.RespondWithError(
-			w, http.StatusInternalServerError, "error",
-			err.Error(),
-		)
+		var er responses.ErrorResponse
+		er.Respond(w, 500, "error", err.Error())
 		return
 	}
 	defer cursor.Close(context.TODO())
@@ -198,34 +175,23 @@ func GetRandomBourbon(w http.ResponseWriter, r *http.Request) {
 	for cursor.Next(context.TODO()) {
 		err := cursor.Decode(&bourbon)
 		if err != nil {
-			responses.RespondWithError(
-				w, http.StatusInternalServerError, "error",
-				err.Error(),
-			)
+			var er responses.ErrorResponse
+			er.Respond(w, 500, "error", err.Error())
 			return
 		}
 	}
 	if err := cursor.Err(); err != nil {
-		responses.RespondWithError(
-			w, http.StatusInternalServerError, "error",
-			err.Error(),
-		)
+		var er responses.ErrorResponse
+		er.Respond(w, 500, "error", err.Error())
 		return
 	}
 	if bourbon.Title != "" {
-		json.NewEncoder(w).Encode(
-			responses.StandardResponse{
-				Status:  http.StatusOK,
-				Message: "success",
-				Data:    map[string]interface{}{"data": bourbon},
-			},
-		)
+		var br responses.StandardResponse
+		br.Respond(w, 200, "success", bourbon)
 	} else {
 		err = errors.New("not found")
-		responses.RespondWithError(
-			w, http.StatusNotFound, "error",
-			err.Error(),
-		)
+		var er responses.ErrorResponse
+		er.Respond(w, 404, "error", err.Error())
 	}
 
 }
@@ -237,10 +203,8 @@ func GetBourbonById(w http.ResponseWriter, r *http.Request) {
 	// convert id string to ObjectId
 	objectId, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
-		responses.RespondWithError(
-			w, http.StatusInternalServerError, "error",
-			err.Error(),
-		)
+		var er responses.ErrorResponse
+		er.Respond(w, 500, "error", err.Error())
 		return
 	}
 	filter := bson.M{"_id": objectId}
@@ -250,27 +214,17 @@ func GetBourbonById(w http.ResponseWriter, r *http.Request) {
 		filter,
 	).Decode(&bourbon)
 	if err != nil {
-		responses.RespondWithError(
-			w, http.StatusBadRequest, "error",
-			err.Error(),
-		)
+		var er responses.ErrorResponse
+		er.Respond(w, 400, "error", err.Error())
 		return
 	}
 	if bourbon.Title != "" {
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(
-			responses.StandardResponse{
-				Status:  http.StatusOK,
-				Message: "success",
-				Data:    map[string]interface{}{"data": bourbon},
-			},
-		)
+		var br responses.StandardResponse
+		br.Respond(w, 200, "success", bourbon)
 	} else {
 		err = errors.New("not found")
-		responses.RespondWithError(
-			w, http.StatusNotFound, "error",
-			err.Error(),
-		)
+		var er responses.ErrorResponse
+		er.Respond(w, 404, "error", err.Error())
 	}
 
 }

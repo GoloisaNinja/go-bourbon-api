@@ -8,6 +8,12 @@ type UserCollectionRef struct {
 	Bourbons       []*BourbonsRef     `bson:"bourbons" json:"bourbons"`
 }
 
+func (u *UserCollectionRef) Build(cId primitive.ObjectID, n string) {
+	u.CollectionID = cId
+	u.CollectionName = n
+	u.Bourbons = make([]*BourbonsRef, 0)
+}
+
 type UserReviewRef struct {
 	ReviewID    string `bson:"review_id" json:"review_id"`
 	ReviewTitle string `bson:"review_title" json:"review_title"`

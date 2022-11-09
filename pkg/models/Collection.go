@@ -9,3 +9,14 @@ type Collection struct {
 	Private  bool               `bson:"private" json:"private"`
 	Bourbons []*Bourbon         `bson:"bourbons" json:"bourbons"`
 }
+
+func (c *Collection) Build(uId primitive.ObjectID, n string, p bool) {
+	c.ID = primitive.NewObjectID()
+	c.User = &UserRef{
+		ID:       uId,
+		Username: n,
+	}
+	c.Name = n
+	c.Private = p
+	c.Bourbons = make([]*Bourbon, 0)
+}

@@ -11,12 +11,10 @@ type ErrorResponse struct {
 	Data    map[string]interface{} `json:"data"`
 }
 
-func RespondWithError(w http.ResponseWriter, s int, m string, d interface{}) {
-	response := ErrorResponse{
-		Status:  s,
-		Message: m,
-		Data:    map[string]interface{}{"data": d},
-	}
-	w.WriteHeader(s)
-	json.NewEncoder(w).Encode(response)
+func (r ErrorResponse) Respond(w http.ResponseWriter, status int, m string, d interface{}) {
+	r.Status = status
+	r.Message = m
+	r.Data = map[string]interface{}{"data": d}
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(r)
 }
