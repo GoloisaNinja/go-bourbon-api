@@ -10,11 +10,11 @@ type Collection struct {
 	Bourbons []*Bourbon         `bson:"bourbons" json:"bourbons"`
 }
 
-func (c *Collection) Build(uId primitive.ObjectID, n string, p bool) {
+func (c *Collection) Build(uId primitive.ObjectID, un, n string, p bool) {
 	c.ID = primitive.NewObjectID()
 	c.User = &UserRef{
 		ID:       uId,
-		Username: n,
+		Username: un,
 	}
 	c.Name = n
 	c.Private = p

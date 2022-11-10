@@ -105,7 +105,7 @@ func CreateCollection(w http.ResponseWriter, r *http.Request) {
 	json.Unmarshal(rBody, &cReq)
 	cReq.collectionReqDefaults()
 	var newColl models.Collection
-	newColl.Build(dbUser.ID, cReq.Name, cReq.Private)
+	newColl.Build(dbUser.ID, dbUser.Username, cReq.Name, cReq.Private)
 	_, colErr := collectionsCollection.InsertOne(context.TODO(), newColl)
 	if colErr != nil {
 		var er responses.ErrorResponse
@@ -134,24 +134,47 @@ func CreateCollection(w http.ResponseWriter, r *http.Request) {
 	sr.Respond(w, 200, "success", cr)
 }
 
-// TODO UpdateCollection handler with logic to update the name and the private flag
-// UpdateCollection updates a collection name and privacy flag
-// based on the request body that contains either/or/both name and isPrivate
-
-//func UpdateCollection(w http.ResponseWriter, r *http.Request) {
-//	params := mux.Vars(r)
-//	collectionId, _ := primitive.ObjectIDFromHex(params["id"])
-//	// user id is in the context from auth middleware
-//	userId, uErr := helpers.GetUserIdFromAuthCtx(r.Context())
-//	if uErr != nil {
-//		responses.RespondWithError(w, http.StatusInternalServerError, "error", uErr.Error())
-//		return
-//	}
-//	rBody, _ := ioutil.ReadAll(r.Body)
-//	var rMap map[string]interface{}
-//	json.Unmarshal(rBody, &rMap)
-//
-//}
+func UpdateCollection(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	collectionId, _ := primitive.ObjectIDFromHex(params["id"])
+	// user id is in the context from auth middleware
+	userId, uErr := helpers.GetUserIdFromAuthCtx(r.Context())
+	if uErr != nil {
+		var er responses.ErrorResponse
+		er.Respond(w, 500, "error", uErr.Error())
+		return
+	}
+	rBody, _ := ioutil.ReadAll(r.Body)
+	var cr CollectionRequest
+	var c models.Collection
+	json.Unmarshal(rBody, &cr)
+	cr.collectionReqDefaults()
+	cFilter := bson.M{"_id": collectionId}
+	cUpdate := []bson.D{bson.D{{"$set", bson.D{{"name", cr.Name}, {"private", cr.Private}}}}}
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	cErr := collectionsCollection.FindOneAndUpdate(context.TODO(), cFilter, cUpdate, opts).Decode(&c)
+	if cErr != nil {
+		var er responses.ErrorResponse
+		er.Respond(w, 400, "error", cErr.Error())
+		return
+	}
+	var u models.User
+	uFilter := bson.M{"_id": userId, "collections.collection_id": collectionId}
+	uUpdate := bson.M{"$set": bson.M{"collections.$.collection_name": cr.Name}}
+	uOpts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	uUpErr := usersCollection.FindOneAndUpdate(context.TODO(), uFilter, uUpdate, uOpts).Decode(&u)
+	if uUpErr != nil {
+		var er responses.ErrorResponse
+		er.Respond(w, 400, "error", uUpErr.Error())
+		return
+	}
+	response := responses.CollectionResponse{
+		Collection:      &c,
+		UserCollections: u.Collections,
+	}
+	var sr responses.StandardResponse
+	sr.Respond(w, 200, "success", response)
+}
 
 // DeleteCollection deletes a collection from the collections
 // collection and from the user collection reference - the collection

@@ -30,6 +30,7 @@ func routes() http.Handler {
 	// collection handlers
 	getCollectionById := http.HandlerFunc(handlers.GetCollectionById)
 	createCollectionHandler := http.HandlerFunc(handlers.CreateCollection)
+	updateCollectionHandler := http.HandlerFunc(handlers.UpdateCollection)
 	deleteCollectionHandler := http.HandlerFunc(handlers.DeleteCollection)
 	addBourbonToCollectionHandler := http.HandlerFunc(handlers.AddBourbonToCollection)
 
@@ -59,6 +60,8 @@ func routes() http.Handler {
 	r.Handle(
 		"/api/collection", middleware.AuthMiddleware(createCollectionHandler),
 	).Methods("POST")
+	// update an existing collection name and private flag
+	r.Handle("/api/collection/update/{id}", middleware.AuthMiddleware(updateCollectionHandler)).Methods("POST")
 	// delete an existing collection
 	r.Handle(
 		"/api/collection/{id}", middleware.AuthMiddleware(deleteCollectionHandler),
