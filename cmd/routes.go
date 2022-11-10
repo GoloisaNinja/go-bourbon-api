@@ -33,6 +33,7 @@ func routes() http.Handler {
 	updateCollectionHandler := http.HandlerFunc(handlers.UpdateCollection)
 	deleteCollectionHandler := http.HandlerFunc(handlers.DeleteCollection)
 	addBourbonToCollectionHandler := http.HandlerFunc(handlers.AddBourbonToCollection)
+	deleteBourbonFromCollectionHandler := http.HandlerFunc(handlers.DeleteBourbonFromCollection)
 
 	// define routes
 	// bourbon routes
@@ -70,6 +71,10 @@ func routes() http.Handler {
 	r.Handle(
 		"/api/collection/add/{id}", middleware.AuthMiddleware(addBourbonToCollectionHandler),
 	).Methods("POST")
+	// remove a bourbon by id from a collection and a usercollectionref
+	r.Handle(
+		"/api/collection/delete/{collectionId}/{bourbonId}", middleware.AuthMiddleware(deleteBourbonFromCollectionHandler),
+	).Methods("DELETE")
 
 	return r
 }

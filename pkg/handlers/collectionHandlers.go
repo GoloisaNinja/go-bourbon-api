@@ -25,6 +25,47 @@ type CollectionRequest struct {
 	Private bool   `json:"private"`
 }
 
+func bourbonExistsInDb(id primitive.ObjectID) (models.Bourbon, error) {
+	var b models.Bourbon
+	bFilter := bson.M{"_id": id}
+	err := bourbonsCollection.FindOne(context.TODO(), bFilter).Decode(&b)
+	return b, err
+}
+
+func collectionExistsInDb(cid, uid primitive.ObjectID) (models.Collection, error) {
+	var c models.Collection
+	cFilter := bson.D{{"_id", cid}, {"user.id", uid}}
+	err := collectionsCollection.FindOne(context.TODO(), cFilter).Decode(&c)
+	return c, err
+}
+
+func updateBInC(b *models.Bourbon, cid, uid primitive.ObjectID, t string) (models.Collection, error) {
+	var c models.Collection
+	update := bson.M{"$pull": bson.M{"bourbons": bson.M{"_id": b.ID}}}
+	if t == "add" {
+		update = bson.M{"$push": bson.M{"bourbons": b}}
+	}
+	filter := bson.D{{"_id", cid}, {"user.id", uid}}
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	err := collectionsCollection.FindOneAndUpdate(context.TODO(), filter, update, opts).Decode(&c)
+	return c, err
+}
+
+func updateBrefInUC(bid, cid, uid primitive.ObjectID, t string) (models.User, error) {
+	var u models.User
+	bRef := models.BourbonsRef{
+		BourbonID: bid,
+	}
+	update := bson.M{"$pull": bson.M{"collections.$.bourbons": bRef}}
+	if t == "add" {
+		update = bson.M{"$push": bson.M{"collections.$.bourbons": bRef}}
+	}
+	filter := bson.M{"_id": uid, "collections.collection_id": cid}
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	err := usersCollection.FindOneAndUpdate(context.TODO(), filter, update, opts).Decode(&u)
+	return u, err
+}
+
 func bourbonAlreadyInCollection(b []*models.Bourbon, id primitive.ObjectID) bool {
 	result := false
 	for _, bObj := range b {
@@ -255,57 +296,106 @@ func AddBourbonToCollection(w http.ResponseWriter, r *http.Request) {
 	// if yes/yes/no -> then we can complete the route handler
 
 	// does the bourbon exist?
-	var bourbonFromReq models.Bourbon
-	bFilter := bson.M{"_id": bourbonId}
-	bDbErr := bourbonsCollection.FindOne(context.TODO(), bFilter).Decode(&bourbonFromReq)
-	if bDbErr != nil {
+	bourbon, err := bourbonExistsInDb(bourbonId)
+	if err != nil {
 		var er responses.ErrorResponse
-		er.Respond(w, 500, "error", bDbErr.Error())
+		er.Respond(w, 500, "error", err.Error())
 		return
 	}
 	// does the collection exist and belong to the user?
-	var collectionFromReq models.Collection
-	cFilter := bson.D{{"_id", collectionId}, {"user.id", userId}}
-	cDbErr := collectionsCollection.FindOne(context.TODO(), cFilter).Decode(&collectionFromReq)
-	if cDbErr != nil {
+	collection, cErr := collectionExistsInDb(collectionId, userId)
+	if cErr != nil {
 		var er responses.ErrorResponse
 		er.Respond(w, 400, "error", "bad request or collection unauthorized")
 		return
 	}
 	// is the bourbon already in the collection?
-	if bourbonAlreadyInCollection(collectionFromReq.Bourbons, bourbonId) {
+	if bourbonAlreadyInCollection(collection.Bourbons, bourbonId) {
 		var er responses.ErrorResponse
 		er.Respond(w, 400, "error", "bourbon already in collection")
 		return
 	}
 	// we can now add the bourbon to the collection and to the user collection ref
 	// add bourbon to collection model and return updated doc
-	var updatedCollection models.Collection
-	update := bson.M{"$push": bson.M{"bourbons": bourbonFromReq}}
-	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
-	cUpErr := collectionsCollection.FindOneAndUpdate(context.TODO(), cFilter, update, opts).Decode(&updatedCollection)
+	uc, cUpErr := updateBInC(&bourbon, collectionId, userId, "add")
 	if cUpErr != nil {
 		var er responses.ErrorResponse
 		er.Respond(w, 500, "error", cUpErr.Error())
 		return
 	}
 	// add bourbon to user collection ref
-	var updatedUser models.User
-	bourbonRef := models.BourbonsRef{
-		BourbonID: bourbonId,
-	}
-	userCollRefFilter := bson.M{"_id": userId, "collections.collection_id": collectionId}
-	userCollRefUpdate := bson.M{"$push": bson.M{"collections.$.bourbons": bourbonRef}}
-	userOpts := options.FindOneAndUpdate().SetReturnDocument(options.After)
-	uUpErr := usersCollection.FindOneAndUpdate(context.TODO(), userCollRefFilter, userCollRefUpdate, userOpts).Decode(&updatedUser)
+	uu, uUpErr := updateBrefInUC(bourbonId, collectionId, userId, "add")
 	if uUpErr != nil {
 		var er responses.ErrorResponse
 		er.Respond(w, 500, "error", uUpErr.Error())
 		return
 	}
 	response := responses.CollectionResponse{
-		Collection:      &updatedCollection,
-		UserCollections: updatedUser.Collections,
+		Collection:      &uc,
+		UserCollections: uu.Collections,
+	}
+	var sr responses.StandardResponse
+	sr.Respond(w, 200, "success", response)
+}
+
+// DeleteBourbonFromCollection does the inverse of AddBourbonToCollection
+// the conditional control flow is almost identical with the exception
+// being that now we WANT the bourbon to exist in the collection so
+// that we can delete it
+func DeleteBourbonFromCollection(w http.ResponseWriter, r *http.Request) {
+	// params id contains collection id
+	params := mux.Vars(r)
+	collectionId, _ := primitive.ObjectIDFromHex(params["collectionId"])
+	bourbonId, _ := primitive.ObjectIDFromHex(params["bourbonId"])
+	// user id is in the context from auth middleware
+	userId, uErr := helpers.GetUserIdFromAuthCtx(r.Context())
+	if uErr != nil {
+		var er responses.ErrorResponse
+		er.Respond(w, 500, "error", uErr.Error())
+		return
+	}
+	//order of operations:
+	//does the bourbon exist
+	//does the collection exist and belong to the user?
+	//does the bourbon already exist in the collection?
+	//if yes/yes/yes -> then we can complete the route handler
+	bourbon, err := bourbonExistsInDb(bourbonId)
+	if err != nil {
+		var er responses.ErrorResponse
+		er.Respond(w, 500, "error", err.Error())
+		return
+	}
+	// does the collection exist and belong to the user?
+	collection, cErr := collectionExistsInDb(collectionId, userId)
+	if cErr != nil {
+		var er responses.ErrorResponse
+		er.Respond(w, 400, "error", "bad request or collection unauthorized")
+		return
+	}
+	// is the bourbon already in the collection?
+	if !bourbonAlreadyInCollection(collection.Bourbons, bourbonId) {
+		var er responses.ErrorResponse
+		er.Respond(w, 400, "error", "bourbon not in collection")
+		return
+	}
+	// we can now delete the bourbon from the collection and from the user collection ref
+	// remove bourbon from collection model and return updated doc
+	uc, cUpErr := updateBInC(&bourbon, collectionId, userId, "remove")
+	if cUpErr != nil {
+		var er responses.ErrorResponse
+		er.Respond(w, 500, "error", cUpErr.Error())
+		return
+	}
+	// remove bourbon from user collection ref
+	uu, uUpErr := updateBrefInUC(bourbonId, collectionId, userId, "remove")
+	if uUpErr != nil {
+		var er responses.ErrorResponse
+		er.Respond(w, 500, "error", uUpErr.Error())
+		return
+	}
+	response := responses.CollectionResponse{
+		Collection:      &uc,
+		UserCollections: uu.Collections,
 	}
 	var sr responses.StandardResponse
 	sr.Respond(w, 200, "success", response)
