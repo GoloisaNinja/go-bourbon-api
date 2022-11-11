@@ -10,3 +10,18 @@ type UserRef struct {
 type BourbonsRef struct {
 	BourbonID primitive.ObjectID `bson:"bourbon_id" json:"bourbon_id"`
 }
+
+// CollectionRequest struct will be the same for a collection collection or a wishlist collection
+type CollectionRequest struct {
+	Name    string `json:"name"`
+	Private bool   `json:"private"`
+}
+
+func (c *CollectionRequest) FillDefaults() {
+	if c.Private != true && c.Private != false {
+		c.Private = true
+	}
+	if c.Name == "" {
+		c.Name = "Unnamed Collection"
+	}
+}

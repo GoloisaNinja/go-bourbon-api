@@ -35,6 +35,51 @@ func bourbonUpdateValid(b []*models.Bourbon, id primitive.ObjectID, uType string
 	return result
 }
 
+func CreateController(rBody []byte, uId primitive.ObjectID, uName string, cType string) (ControlStuct, responses.ErrorResponse) {
+	var collectionToUse *mongo.Collection
+	var definedError responses.ErrorResponse
+	// collection models
+	var cr models.CollectionRequest
+	var cm models.Collection
+	var uCRef models.UserCollectionRef
+	// wishlist specific userRef
+	var uWRef models.UserWishlistRef
+	// User
+	var u models.User
+	var result ControlStuct
+	// filters, updates, and opts
+	var update bson.M
+	filter := bson.M{"_id": uId}
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	json.Unmarshal(rBody, &cr)
+	cr.FillDefaults()
+	cm.Build(uId, uName, cr.Name, cr.Private)
+	if cType == "c" {
+		uCRef.Build(cm.ID, cm.Name)
+		collectionToUse = collectionsCollection
+		update = bson.M{"$push": bson.M{"collections": uCRef}}
+	} else {
+		uWRef.Build(cm.ID, cm.Name)
+		collectionToUse = wishlistsCollection
+		update = bson.M{"$push": bson.M{"wishlists": uWRef}}
+	}
+	_, err := collectionToUse.InsertOne(context.TODO(), cm)
+	if err != nil {
+		definedError.Build(500, "error", err.Error())
+		return result, definedError
+	}
+	uErr := usersCollection.FindOneAndUpdate(context.TODO(), filter, update, opts).Decode(&u)
+	if uErr != nil {
+		definedError.Build(500, "error", uErr.Error())
+		return result, definedError
+	}
+	cmM, _ := json.Marshal(cm)
+	umM, _ := json.Marshal(u)
+	result.Element = cmM
+	result.UserRef = umM
+	return result, definedError
+}
+
 // DeleteController is a reusable function between collections and wishlists for deleting
 // both full collection or wishlist document as well as the user reference document
 func DeleteController(cId, uId primitive.ObjectID, cType string) (models.User, responses.ErrorResponse) {
@@ -72,6 +117,54 @@ func DeleteController(cId, uId primitive.ObjectID, cType string) (models.User, r
 	return u, definedError
 }
 
+func UpdateController(rBody []byte, uId, cId primitive.ObjectID, cType string) (ControlStuct, responses.ErrorResponse) {
+	var collectionToUse *mongo.Collection
+	var definedError responses.ErrorResponse
+	// collection models
+	var cr models.CollectionRequest
+	var cm models.Collection
+	var uCRef models.UserCollectionRef
+	// wishlist specific userRef
+	var uWRef models.UserWishlistRef
+	// User
+	var u models.User
+	var uFilter bson.M
+	var uUpdate bson.M
+	var result ControlStuct
+	json.Unmarshal(rBody, &cr)
+	cr.FillDefaults()
+	// filters, updates, and opts
+	cFilter := bson.M{"_id": cId}
+	cUpdate := []bson.D{bson.D{{"$set", bson.D{{"name", cr.Name}, {"private", cr.Private}}}}}
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	if cType == "c" {
+		uCRef.Build(cId, cr.Name)
+		uFilter = bson.M{"_id": uId, "collections.collection_id": cId}
+		uUpdate = bson.M{"$set": bson.M{"collections.$.collection_name": cr.Name}}
+		collectionToUse = collectionsCollection
+	} else {
+		uWRef.Build(cId, cr.Name)
+		uFilter = bson.M{"_id": uId, "wishlists.wishlist_id": cId}
+		uUpdate = bson.M{"$set": bson.M{"wishlists.$.wishlist_name": cr.Name}}
+		collectionToUse = wishlistsCollection
+	}
+	err := collectionToUse.FindOneAndUpdate(context.TODO(), cFilter, cUpdate, opts).Decode(&cm)
+	if err != nil {
+		definedError.Build(500, "error", err.Error())
+		return result, definedError
+	}
+	uErr := usersCollection.FindOneAndUpdate(context.TODO(), uFilter, uUpdate, opts).Decode(&u)
+	if uErr != nil {
+		definedError.Build(500, "error", uErr.Error())
+		return result, definedError
+	}
+	cmM, _ := json.Marshal(cm)
+	umM, _ := json.Marshal(u)
+	result.Element = cmM
+	result.UserRef = umM
+	return result, definedError
+}
+
 // ExistsAndUpdateController has a conditional control flow that determines what kind of collection
 // is being asked to update - collection or wishlist
 // query filters, updates, and options are constructed based on collection or wishlist
@@ -83,13 +176,11 @@ func DeleteController(cId, uId primitive.ObjectID, cType string) (models.User, r
 func ExistsAndUpdateController(cId, bId, uId primitive.ObjectID, action, cType string) (ControlStuct, responses.ErrorResponse) {
 	var b models.Bourbon
 	var cm models.Collection
-	var wm models.Wishlist
 	var result ControlStuct
 	var definedError responses.ErrorResponse
 	bRef := models.BourbonsRef{
 		BourbonID: bId,
 	}
-	var x bson.M // this interface will hold the collection element regardless of struct type
 	bFilter := bson.M{"_id": bId}
 	// check if the bourbon exists
 	err := bourbonsCollection.FindOne(context.TODO(), bFilter).Decode(&b)
@@ -108,6 +199,8 @@ func ExistsAndUpdateController(cId, bId, uId primitive.ObjectID, action, cType s
 		cUpdate = bson.M{"$pull": bson.M{"bourbons": bson.M{"_id": b.ID}}}
 	}
 	if cType == "w" {
+		// TODO - the filter and update queries will need to be added here
+		// TODO cont. before this controller will work with wishlists
 		collectionToUse = wishlistsCollection
 	} else {
 		collectionToUse = collectionsCollection
@@ -117,30 +210,18 @@ func ExistsAndUpdateController(cId, bId, uId primitive.ObjectID, action, cType s
 			uUpdate = bson.M{"$pull": bson.M{"collections.$.bourbons": bRef}}
 		}
 	}
-	dErr := collectionToUse.FindOne(context.TODO(), filter).Decode(&x)
+	dErr := collectionToUse.FindOne(context.TODO(), filter).Decode(&cm)
 	if dErr != nil {
 		definedError.Build(400, "error", err.Error())
 		return result, definedError
 	}
-	// marshal/unmarshal result of query - determine collection type and use the
-	// bourbonUpdateValid func to see if the user action can be performed -
-	// does the bourbon exist in the collection document
-	mX, _ := json.Marshal(x)
-	if cType == "w" {
-		json.Unmarshal(mX, &wm)
-		if !bourbonUpdateValid(wm.Bourbons, b.ID, action) {
-			definedError.Build(400, "error", "action not valid")
-			return result, definedError
-		}
-	} else {
-		json.Unmarshal(mX, &cm)
-		if !bourbonUpdateValid(cm.Bourbons, b.ID, action) {
-			definedError.Build(400, "error", "action not valid")
-			return result, definedError
-		}
+	if !bourbonUpdateValid(cm.Bourbons, b.ID, action) {
+		definedError.Build(400, "error", "action not valid")
+		return result, definedError
 	}
+
 	// determine the type of update needed based on action - default is adding bourbon
-	cUpErr := collectionToUse.FindOneAndUpdate(context.TODO(), filter, cUpdate, opts).Decode(&x)
+	cUpErr := collectionToUse.FindOneAndUpdate(context.TODO(), filter, cUpdate, opts).Decode(&cm)
 	if cUpErr != nil {
 		definedError.Build(400, "error", cUpErr.Error())
 		return result, definedError
@@ -152,9 +233,9 @@ func ExistsAndUpdateController(cId, bId, uId primitive.ObjectID, action, cType s
 		definedError.Build(400, "error", uErr.Error())
 		return result, definedError
 	}
-	em, _ := json.Marshal(x)
-	um, _ := json.Marshal(u)
-	result.Element = em
-	result.UserRef = um
+	cMm, _ := json.Marshal(cm)
+	uMm, _ := json.Marshal(u)
+	result.Element = cMm
+	result.UserRef = uMm
 	return result, definedError
 }

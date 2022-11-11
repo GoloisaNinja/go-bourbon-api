@@ -6,4 +6,5 @@ type JSONResponse interface {
 
 type BuildNew interface {
 	Build()
+	FillDefaults()
 }

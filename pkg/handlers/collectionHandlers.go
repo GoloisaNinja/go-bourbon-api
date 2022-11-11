@@ -10,7 +10,6 @@ import (
 	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo/options"
 	"io/ioutil"
 	"net/http"
 )
@@ -19,23 +18,6 @@ var collectionsCollection = db.GetCollection(
 	db.DB,
 	"collections",
 )
-
-type CollectionRequest struct {
-	Name    string `json:"name"`
-	Private bool   `json:"private"`
-}
-
-// collectionReq_defaults is called within the CreateCollection handler
-// to evaluate the incoming json that has been mapped allowing us to
-// manage to some defaults if the incoming request is less than ideal
-func (req *CollectionRequest) collectionReqDefaults() {
-	if req.Private != true && req.Private != false {
-		req.Private = true
-	}
-	if req.Name == "" {
-		req.Name = "Unnamed Collection"
-	}
-}
 
 // GetCollectionById returns a collection - if the collection is
 // private then the user making the request must be the owner of
@@ -82,43 +64,27 @@ func CreateCollection(w http.ResponseWriter, r *http.Request) {
 	}
 	// get the user from the database
 	filter := bson.M{"_id": id}
-	var dbUser models.User
-	err := usersCollection.FindOne(context.TODO(), filter).Decode(&dbUser)
-	if err != nil {
-		var er responses.ErrorResponse
-		er.Respond(w, 500, "error", err.Error())
-		return
-	}
-	// get the request body
-	rBody, _ := ioutil.ReadAll(r.Body)
-	var cReq CollectionRequest
-	json.Unmarshal(rBody, &cReq)
-	cReq.collectionReqDefaults()
-	var newColl models.Collection
-	newColl.Build(dbUser.ID, dbUser.Username, cReq.Name, cReq.Private)
-	_, colErr := collectionsCollection.InsertOne(context.TODO(), newColl)
-	if colErr != nil {
-		var er responses.ErrorResponse
-		er.Respond(w, 500, "error", colErr.Error())
-		return
-	}
-	var newUserColl models.UserCollectionRef
-	newUserColl.Build(newColl.ID, newColl.Name)
-	var updatedUser models.User
-	update := bson.M{"$push": bson.M{"collections": newUserColl}}
-	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
-	uErr := usersCollection.FindOneAndUpdate(
-		context.TODO(), filter, update,
-		opts,
-	).Decode(&updatedUser)
+	var user models.User
+	uErr := usersCollection.FindOne(context.TODO(), filter).Decode(&user)
 	if uErr != nil {
 		var er responses.ErrorResponse
 		er.Respond(w, 500, "error", uErr.Error())
 		return
 	}
+	// get the request body
+	rBody, _ := ioutil.ReadAll(r.Body)
+	controlStruct, err := CreateController(rBody, user.ID, user.Username, "c")
+	if err.Status != 0 {
+		err.Respond(w, err.Status, err.Message, err.Data)
+		return
+	}
+	var cm models.Collection
+	var um models.User
+	json.Unmarshal(controlStruct.Element, &cm)
+	json.Unmarshal(controlStruct.UserRef, &um)
 	cr := responses.CollectionResponse{
-		Collection:      &newColl,
-		UserCollections: updatedUser.Collections,
+		Collection:      &cm,
+		UserCollections: um.Collections,
 	}
 	var sr responses.StandardResponse
 	sr.Respond(w, 200, "success", cr)
@@ -135,32 +101,18 @@ func UpdateCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rBody, _ := ioutil.ReadAll(r.Body)
-	var cr CollectionRequest
-	var c models.Collection
-	json.Unmarshal(rBody, &cr)
-	cr.collectionReqDefaults()
-	cFilter := bson.M{"_id": collectionId}
-	cUpdate := []bson.D{bson.D{{"$set", bson.D{{"name", cr.Name}, {"private", cr.Private}}}}}
-	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
-	cErr := collectionsCollection.FindOneAndUpdate(context.TODO(), cFilter, cUpdate, opts).Decode(&c)
-	if cErr != nil {
-		var er responses.ErrorResponse
-		er.Respond(w, 400, "error", cErr.Error())
+	controlStuct, err := UpdateController(rBody, userId, collectionId, "c")
+	if err.Status != 0 {
+		err.Respond(w, err.Status, err.Message, err.Data)
 		return
 	}
-	var u models.User
-	uFilter := bson.M{"_id": userId, "collections.collection_id": collectionId}
-	uUpdate := bson.M{"$set": bson.M{"collections.$.collection_name": cr.Name}}
-	uOpts := options.FindOneAndUpdate().SetReturnDocument(options.After)
-	uUpErr := usersCollection.FindOneAndUpdate(context.TODO(), uFilter, uUpdate, uOpts).Decode(&u)
-	if uUpErr != nil {
-		var er responses.ErrorResponse
-		er.Respond(w, 400, "error", uUpErr.Error())
-		return
-	}
+	var cm models.Collection
+	var um models.User
+	json.Unmarshal(controlStuct.Element, &cm)
+	json.Unmarshal(controlStuct.UserRef, &um)
 	response := responses.CollectionResponse{
-		Collection:      &c,
-		UserCollections: u.Collections,
+		Collection:      &cm,
+		UserCollections: um.Collections,
 	}
 	var sr responses.StandardResponse
 	sr.Respond(w, 200, "success", response)
@@ -218,15 +170,15 @@ func AddBourbonToCollection(w http.ResponseWriter, r *http.Request) {
 	// does the collection exist and belong to the user?
 	// does the bourbon already exist in the collection?
 	// if yes/yes/no -> then we can complete the route handler
-	conditionStruct, err := ExistsAndUpdateController(collectionId, bourbonId, userId, "add", "c")
+	controlStruct, err := ExistsAndUpdateController(collectionId, bourbonId, userId, "add", "c")
 	if err.Status != 0 {
 		err.Respond(w, err.Status, err.Message, err.Data)
 		return
 	}
 	var c models.Collection
 	var u models.User
-	json.Unmarshal(conditionStruct.Element, &c)
-	json.Unmarshal(conditionStruct.UserRef, &u)
+	json.Unmarshal(controlStruct.Element, &c)
+	json.Unmarshal(controlStruct.UserRef, &u)
 
 	response := responses.CollectionResponse{
 		Collection:      &c,
@@ -255,15 +207,15 @@ func DeleteBourbonFromCollection(w http.ResponseWriter, r *http.Request) {
 	//does the collection exist and belong to the user?
 	//does the bourbon already exist in the collection?
 	//if yes/yes/yes -> then we can complete the route handler
-	conditionStruct, err := ExistsAndUpdateController(collectionId, bourbonId, userId, "remove", "c")
+	controlStruct, err := ExistsAndUpdateController(collectionId, bourbonId, userId, "remove", "c")
 	if err.Status != 0 {
 		err.Respond(w, err.Status, err.Message, err.Data)
 		return
 	}
 	var c models.Collection
 	var u models.User
-	json.Unmarshal(conditionStruct.Element, &c)
-	json.Unmarshal(conditionStruct.UserRef, &u)
+	json.Unmarshal(controlStruct.Element, &c)
+	json.Unmarshal(controlStruct.UserRef, &u)
 
 	response := responses.CollectionResponse{
 		Collection:      &c,

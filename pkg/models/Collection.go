@@ -2,6 +2,8 @@ package models
 
 import "go.mongodb.org/mongo-driver/bson/primitive"
 
+// Collection struct should work for both the bourbon collection and the bourbon wishlist
+// data base collection types
 type Collection struct {
 	ID       primitive.ObjectID `bson:"_id" json:"_id"`
 	User     *UserRef           `bson:"user" json:"user"`

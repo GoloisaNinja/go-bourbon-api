@@ -20,9 +20,15 @@ type UserReviewRef struct {
 }
 
 type UserWishlistRef struct {
-	WishlistID   string         `bson:"wishlist_id" json:"wishlist_id"`
-	WishlistName string         `bson:"wishlist_name" json:"wishlist_name"`
-	Bourbons     []*BourbonsRef `bson:"bourbons" json:"bourbons"`
+	WishlistID   primitive.ObjectID `bson:"wishlist_id" json:"wishlist_id"`
+	WishlistName string             `bson:"wishlist_name" json:"wishlist_name"`
+	Bourbons     []*BourbonsRef     `bson:"bourbons" json:"bourbons"`
+}
+
+func (u *UserWishlistRef) Build(wId primitive.ObjectID, n string) {
+	u.WishlistID = wId
+	u.WishlistName = n
+	u.Bourbons = make([]*BourbonsRef, 0)
 }
 
 type UserTokenRef struct {
