@@ -180,35 +180,13 @@ func DeleteCollection(w http.ResponseWriter, r *http.Request) {
 		er.Respond(w, 500, "error", uErr.Error())
 		return
 	}
-	// deleting the collection document entirely
-	cFilter := bson.M{"_id": collectionId}
-	result, err := collectionsCollection.DeleteOne(context.TODO(), cFilter)
-	if err != nil {
-		var er responses.ErrorResponse
-		er.Respond(w, 400, "error", err.Error())
-		return
-	}
-	// we didn't find a collection with the param collection belonging to
-	// the authorized user making the request
-	if result.DeletedCount == 0 {
-		var er responses.ErrorResponse
-		er.Respond(w, 400, "error", "bad request")
-		return
-	}
-	// delete the collectionRef from the user document
-	// and return the updated user object doc
-	var updatedUser models.User
-	uFilter := bson.M{"_id": userId}
-	update := bson.M{"$pull": bson.M{"collections": bson.M{"collection_id": collectionId}}}
-	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
-	uUpErr := usersCollection.FindOneAndUpdate(context.TODO(), uFilter, update, opts).Decode(&updatedUser)
-	if uUpErr != nil {
-		var er responses.ErrorResponse
-		er.Respond(w, 401, "error", "unauthorized")
+	user, err := DeleteController(collectionId, userId, "c")
+	if err.Status != 0 {
+		err.Respond(w, err.Status, err.Message, err.Data)
 		return
 	}
 	var ur responses.StandardResponse
-	ur.Respond(w, 200, "success", updatedUser.Collections)
+	ur.Respond(w, 200, "success", user.Collections)
 }
 
 // AddBourbonToCollection route relies on the auth middleware to

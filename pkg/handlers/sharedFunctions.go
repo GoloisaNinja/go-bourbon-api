@@ -35,6 +35,43 @@ func bourbonUpdateValid(b []*models.Bourbon, id primitive.ObjectID, uType string
 	return result
 }
 
+// DeleteController is a reusable function between collections and wishlists for deleting
+// both full collection or wishlist document as well as the user reference document
+func DeleteController(cId, uId primitive.ObjectID, cType string) (models.User, responses.ErrorResponse) {
+	var collectionToUse *mongo.Collection
+	var definedError responses.ErrorResponse
+	var update bson.M
+	var u models.User
+	if cType == "c" {
+		collectionToUse = collectionsCollection
+		update = bson.M{"$pull": bson.M{"collections": bson.M{"collection_id": cId}}}
+	} else {
+		collectionToUse = wishlistsCollection
+	}
+	filter := bson.M{"_id": cId, "user.id": uId}
+	result, err := collectionToUse.DeleteOne(context.TODO(), filter)
+	if err != nil {
+		definedError.Build(400, "error", err.Error())
+		return u, definedError
+	}
+	// we didn't find a collection with the param collection belonging to
+	// the authorized user making the request
+	if result.DeletedCount == 0 {
+		definedError.Build(400, "error", "bad request")
+		return u, definedError
+	}
+	// delete the collectionRef from the user document
+	// and return the updated user object doc
+	uFilter := bson.M{"_id": uId}
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	uUpErr := usersCollection.FindOneAndUpdate(context.TODO(), uFilter, update, opts).Decode(&u)
+	if uUpErr != nil {
+		definedError.Build(401, "error", "unauthorized")
+		return u, definedError
+	}
+	return u, definedError
+}
+
 // ExistsAndUpdateController has a conditional control flow that determines what kind of collection
 // is being asked to update - collection or wishlist
 // query filters, updates, and options are constructed based on collection or wishlist
