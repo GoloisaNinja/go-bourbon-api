@@ -18,6 +18,11 @@ type ControlStuct struct {
 
 func bourbonUpdateValid(b []*models.Bourbon, id primitive.ObjectID, uType string) bool {
 	var result bool
+	if len(b) < 1 && uType == "add" {
+		return true
+	} else if len(b) < 1 && uType != "add" {
+		return false
+	}
 	for _, bObj := range b {
 		if uType == "add" {
 			if bObj.ID == id {
@@ -54,7 +59,7 @@ func CreateController(rBody []byte, uId primitive.ObjectID, uName string, cType 
 	json.Unmarshal(rBody, &cr)
 	cr.FillDefaults()
 	cm.Build(uId, uName, cr.Name, cr.Private)
-	if cType == "c" {
+	if cType == "collection" {
 		uCRef.Build(cm.ID, cm.Name)
 		collectionToUse = collectionsCollection
 		update = bson.M{"$push": bson.M{"collections": uCRef}}
@@ -87,11 +92,12 @@ func DeleteController(cId, uId primitive.ObjectID, cType string) (models.User, r
 	var definedError responses.ErrorResponse
 	var update bson.M
 	var u models.User
-	if cType == "c" {
+	if cType == "collection" {
 		collectionToUse = collectionsCollection
 		update = bson.M{"$pull": bson.M{"collections": bson.M{"collection_id": cId}}}
 	} else {
 		collectionToUse = wishlistsCollection
+		update = bson.M{"$pull": bson.M{"wishlists": bson.M{"wishlist_id": cId}}}
 	}
 	filter := bson.M{"_id": cId, "user.id": uId}
 	result, err := collectionToUse.DeleteOne(context.TODO(), filter)
@@ -117,7 +123,7 @@ func DeleteController(cId, uId primitive.ObjectID, cType string) (models.User, r
 	return u, definedError
 }
 
-func UpdateController(rBody []byte, uId, cId primitive.ObjectID, cType string) (ControlStuct, responses.ErrorResponse) {
+func UpdateController(rBody []byte, cId, uId primitive.ObjectID, cType string) (ControlStuct, responses.ErrorResponse) {
 	var collectionToUse *mongo.Collection
 	var definedError responses.ErrorResponse
 	// collection models
@@ -137,7 +143,7 @@ func UpdateController(rBody []byte, uId, cId primitive.ObjectID, cType string) (
 	cFilter := bson.M{"_id": cId}
 	cUpdate := []bson.D{bson.D{{"$set", bson.D{{"name", cr.Name}, {"private", cr.Private}}}}}
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
-	if cType == "c" {
+	if cType == "collection" {
 		uCRef.Build(cId, cr.Name)
 		uFilter = bson.M{"_id": uId, "collections.collection_id": cId}
 		uUpdate = bson.M{"$set": bson.M{"collections.$.collection_name": cr.Name}}
@@ -150,12 +156,12 @@ func UpdateController(rBody []byte, uId, cId primitive.ObjectID, cType string) (
 	}
 	err := collectionToUse.FindOneAndUpdate(context.TODO(), cFilter, cUpdate, opts).Decode(&cm)
 	if err != nil {
-		definedError.Build(500, "error", err.Error())
+		definedError.Build(400, "error", err.Error())
 		return result, definedError
 	}
 	uErr := usersCollection.FindOneAndUpdate(context.TODO(), uFilter, uUpdate, opts).Decode(&u)
 	if uErr != nil {
-		definedError.Build(500, "error", uErr.Error())
+		definedError.Build(400, "error", uErr.Error())
 		return result, definedError
 	}
 	cmM, _ := json.Marshal(cm)
@@ -191,28 +197,31 @@ func ExistsAndUpdateController(cId, bId, uId primitive.ObjectID, action, cType s
 	var collectionToUse *mongo.Collection
 	// general collection group update and filter queries
 	cUpdate := bson.M{"$push": bson.M{"bourbons": b}}                   // update for collection and wishlist bourbons array
-	filter := bson.D{{"_id", cId}, {"user.id", uId}}                    // general filter
+	filter := bson.M{"_id": cId, "user.id": uId}                        // general filter
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After) // general options
 	var uUpdate bson.M
 	var uFilter bson.M
 	if action != "add" {
 		cUpdate = bson.M{"$pull": bson.M{"bourbons": bson.M{"_id": b.ID}}}
 	}
-	if cType == "w" {
-		// TODO - the filter and update queries will need to be added here
-		// TODO cont. before this controller will work with wishlists
-		collectionToUse = wishlistsCollection
-	} else {
+	if cType == "collection" {
 		collectionToUse = collectionsCollection
-		uUpdate = bson.M{"$push": bson.M{"collections.$.bourbons": bRef}}
 		uFilter = bson.M{"_id": uId, "collections.collection_id": cId}
+		uUpdate = bson.M{"$push": bson.M{"collections.$.bourbons": bRef}}
 		if action != "add" {
 			uUpdate = bson.M{"$pull": bson.M{"collections.$.bourbons": bRef}}
+		}
+	} else {
+		collectionToUse = wishlistsCollection
+		uFilter = bson.M{"_id": uId, "wishlists.wishlist_id": cId}
+		uUpdate = bson.M{"$push": bson.M{"wishlists.$.bourbons": bRef}}
+		if action != "add" {
+			uUpdate = bson.M{"$pull": bson.M{"wishlists.$.bourbons": bRef}}
 		}
 	}
 	dErr := collectionToUse.FindOne(context.TODO(), filter).Decode(&cm)
 	if dErr != nil {
-		definedError.Build(400, "error", err.Error())
+		definedError.Build(400, "error", dErr.Error())
 		return result, definedError
 	}
 	if !bourbonUpdateValid(cm.Bourbons, b.ID, action) {

@@ -24,23 +24,20 @@ func routes() http.Handler {
 
 	// handler functions for routes
 	// user handlers
-	createNewUserHandler := http.HandlerFunc(handlers.CreateUser)
+	createNewUser := http.HandlerFunc(handlers.CreateUser)
 	logoutUserHandler := http.HandlerFunc(handlers.LogoutUser)
 
-	// collection handlers
+	// base database collection type handlers for collections and wishlists
+	// handlers manage both database collection document types by extracting a cType from router params
 	getCollectionById := http.HandlerFunc(handlers.GetCollectionById)
-	createCollectionHandler := http.HandlerFunc(handlers.CreateCollection)
-	updateCollectionHandler := http.HandlerFunc(handlers.UpdateCollection)
-	deleteCollectionHandler := http.HandlerFunc(handlers.DeleteCollection)
-	addBourbonToCollectionHandler := http.HandlerFunc(handlers.AddBourbonToCollection)
-	deleteBourbonFromCollectionHandler := http.HandlerFunc(handlers.DeleteBourbonFromCollection)
-
-	// wishlist handlers
-	getWishlistById := http.HandlerFunc(handlers.GetWishlistById)
-	createWishlistHandler := http.HandlerFunc(handlers.CreateWishlist)
+	createCollection := http.HandlerFunc(handlers.CreateCollection)
+	updateCollection := http.HandlerFunc(handlers.UpdateCollection)
+	deleteCollection := http.HandlerFunc(handlers.DeleteCollection)
+	updateBourbonsToCollection := http.HandlerFunc(handlers.UpdateBourbonsInCollection)
 
 	// define routes
-	// bourbon routes
+
+	// **bourbon routes**
 	// get paginated bourbons
 	r.HandleFunc("/api/bourbons", handlers.GetBourbons).Methods("GET")
 	// get a randomized bourbon
@@ -50,41 +47,32 @@ func routes() http.Handler {
 	// get a bourbon by id
 	r.HandleFunc("/api/bourbons/{id}", handlers.GetBourbonById).Methods("GET")
 
-	// user routes
+	// **user routes**
 	// create a new user
-	r.Handle("/api/user", middleware.NewUserMiddleware(createNewUserHandler)).Methods("POST")
+	r.Handle("/api/user", middleware.NewUserMiddleware(createNewUser)).Methods("POST")
 	// login an existing user
 	r.HandleFunc("/api/user/login", handlers.LoginUser).Methods("GET")
 	// logout a user
 	r.Handle("/api/user/logout", middleware.AuthMiddleware(logoutUserHandler)).Methods("POST")
 
-	// collections routes
-	// get a collection by id
-	r.Handle("/api/collection/{id}", middleware.AuthMiddleware(getCollectionById)).Methods("GET")
-	// create a new collection
+	// **database collections routes (collection & wishlist cTypes)**
+	// get a collection or wishlist collection by id based on cType param
+	r.Handle("/api/{cType}/{id}", middleware.AuthMiddleware(getCollectionById)).Methods("GET")
+	// create a new collection or wishlist based on cType param
 	r.Handle(
-		"/api/collection", middleware.AuthMiddleware(createCollectionHandler),
+		"/api/{cType}", middleware.AuthMiddleware(createCollection),
 	).Methods("POST")
-	// update an existing collection name and private flag
-	r.Handle("/api/collection/update/{id}", middleware.AuthMiddleware(updateCollectionHandler)).Methods("POST")
-	// delete an existing collection
+	// update an existing collection or wishlist name and private flag based on cType param
+	r.Handle("/api/{cType}/update/{id}", middleware.AuthMiddleware(updateCollection)).Methods("POST")
+	// delete an existing collection or wishlist based on cType param
 	r.Handle(
-		"/api/collection/{id}", middleware.AuthMiddleware(deleteCollectionHandler),
+		"/api/{cType}/{id}", middleware.AuthMiddleware(deleteCollection),
 	).Methods("DELETE")
-	// add a bourbon by id into a collection and a usercollectionref
+	// add or delete a bourbon by id into a collection and a usercollectionref
+	// add or delete determined by action placeholder in route as well as cType router param
 	r.Handle(
-		"/api/collection/add/{id}", middleware.AuthMiddleware(addBourbonToCollectionHandler),
-	).Methods("POST")
-	// remove a bourbon by id from a collection and a usercollectionref
-	r.Handle(
-		"/api/collection/delete/{collectionId}/{bourbonId}", middleware.AuthMiddleware(deleteBourbonFromCollectionHandler),
-	).Methods("DELETE")
-
-	// wishlist routes
-	// get wishlist by id
-	r.Handle("/api/wishlist/{id}", middleware.AuthMiddleware(getWishlistById)).Methods("GET")
-	// create new wishlist
-	r.Handle("/api/wishlist", middleware.AuthMiddleware(createWishlistHandler)).Methods("POST")
+		"/api/{cType}/{action}/{collectionId}/{bourbonId}", middleware.AuthMiddleware(updateBourbonsToCollection),
+	).Methods("POST", "DELETE")
 
 	return r
 }
