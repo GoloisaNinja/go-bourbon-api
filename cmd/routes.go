@@ -35,6 +35,10 @@ func routes() http.Handler {
 	addBourbonToCollectionHandler := http.HandlerFunc(handlers.AddBourbonToCollection)
 	deleteBourbonFromCollectionHandler := http.HandlerFunc(handlers.DeleteBourbonFromCollection)
 
+	// wishlist handlers
+	getWishlistById := http.HandlerFunc(handlers.GetWishlistById)
+	createWishlistHandler := http.HandlerFunc(handlers.CreateWishlist)
+
 	// define routes
 	// bourbon routes
 	// get paginated bourbons
@@ -75,6 +79,12 @@ func routes() http.Handler {
 	r.Handle(
 		"/api/collection/delete/{collectionId}/{bourbonId}", middleware.AuthMiddleware(deleteBourbonFromCollectionHandler),
 	).Methods("DELETE")
+
+	// wishlist routes
+	// get wishlist by id
+	r.Handle("/api/wishlist/{id}", middleware.AuthMiddleware(getWishlistById)).Methods("GET")
+	// create new wishlist
+	r.Handle("/api/wishlist", middleware.AuthMiddleware(createWishlistHandler)).Methods("POST")
 
 	return r
 }
