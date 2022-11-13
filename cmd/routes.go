@@ -35,6 +35,9 @@ func routes() http.Handler {
 	deleteCollection := http.HandlerFunc(handlers.DeleteCollection)
 	updateBourbonsToCollection := http.HandlerFunc(handlers.UpdateBourbonsInCollection)
 
+	// review handlers
+	createReview := http.HandlerFunc(handlers.CreateReview)
+
 	// define routes
 
 	// **bourbon routes**
@@ -55,19 +58,25 @@ func routes() http.Handler {
 	// logout a user
 	r.Handle("/api/user/logout", middleware.AuthMiddleware(logoutUserHandler)).Methods("POST")
 
+	// review routes
+	// create a review
+	r.Handle("/api/review", middleware.AuthMiddleware(createReview)).Methods("POST")
+	r.HandleFunc("/api/review/{id}", handlers.GetReviewById).Methods("GET")
+	r.HandleFunc("/api/reviews/{fType}/{id}", handlers.GetAllReviewsByFilterId).Methods("GET")
+
 	// **database collections routes (collection & wishlist cTypes)**
-	// get a collection or wishlist collection by id based on cType param
-	r.Handle("/api/{cType}/{id}", middleware.AuthMiddleware(getCollectionById)).Methods("GET")
 	// create a new collection or wishlist based on cType param
 	r.Handle(
 		"/api/{cType}", middleware.AuthMiddleware(createCollection),
 	).Methods("POST")
-	// update an existing collection or wishlist name and private flag based on cType param
-	r.Handle("/api/{cType}/update/{id}", middleware.AuthMiddleware(updateCollection)).Methods("POST")
+	// get a collection or wishlist collection by id based on cType param
+	r.Handle("/api/{cType}/{id}", middleware.AuthMiddleware(getCollectionById)).Methods("GET")
 	// delete an existing collection or wishlist based on cType param
 	r.Handle(
 		"/api/{cType}/{id}", middleware.AuthMiddleware(deleteCollection),
 	).Methods("DELETE")
+	// update an existing collection or wishlist name and private flag based on cType param
+	r.Handle("/api/{cType}/update/{id}", middleware.AuthMiddleware(updateCollection)).Methods("POST")
 	// add or delete a bourbon by id into a collection and a usercollectionref
 	// add or delete determined by action placeholder in route as well as cType router param
 	r.Handle(

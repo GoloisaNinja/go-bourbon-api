@@ -28,6 +28,8 @@ var bourbonsCollection = db.GetCollection(
 
 // GetBourbons gets paginated bourbons
 func GetBourbons(w http.ResponseWriter, r *http.Request) {
+	var er responses.ErrorResponse
+	var sr responses.StandardResponse
 	sortQuery := "title"
 	searchQuery := " "
 	sortDirection := 1
@@ -37,7 +39,6 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 	if q.Get("page") != "" && q.Get("page") != "1" {
 		p, err := strconv.Atoi(q.Get("page"))
 		if err != nil {
-			var er responses.ErrorResponse
 			er.Respond(w, 500, "error", err.Error())
 			return
 		}
@@ -48,14 +49,12 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 		//r := regexp.MustCompile(`^(?P<S>\w+)_(?P<D>\w+)$`)
 		r, err := regexp.Compile(`^(?P<S>\w+)_(?P<D>\w+)$`)
 		if err != nil {
-			var er responses.ErrorResponse
 			er.Respond(w, 400, "error", err.Error())
 			return
 		}
 		res := r.FindStringSubmatch(q.Get("sort"))
 		if len(res) == 0 {
 			resLenErr := errors.New("sort params in request were bad")
-			var er responses.ErrorResponse
 			er.Respond(w, 400, "error", resLenErr.Error())
 			return
 		}
@@ -82,14 +81,14 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 		searchQuery = q.Get("search")
 	}
 	//opts := options.Find().SetSort(bson.D{{sortQuery, sortDirection}}).SetSkip(int64(skip)).SetLimit(int64(limit))
-	sr := primitive.Regex{searchQuery, "i"}
+	pr := primitive.Regex{searchQuery, "i"}
 	// working filter lol
 	//filter := bson.M{"title": sr}
 	// boss level filter that incorporates title, bottler, distiller
 	filter := bson.M{
 		"$or": []bson.M{
-			bson.M{"title": sr},
-			bson.M{"bottler": sr}, bson.M{"distiller": sr},
+			bson.M{"title": pr},
+			bson.M{"bottler": pr}, bson.M{"distiller": pr},
 		},
 	}
 	// working matchStage lol
@@ -108,7 +107,6 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 		filter,
 	)
 	if ctErr != nil {
-		var er responses.ErrorResponse
 		er.Respond(w, 500, "error", ctErr.Error())
 		return
 	}
@@ -119,7 +117,6 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 		mongo.Pipeline{matchStage, sortStage, skipStage, limitStage},
 	)
 	if fetchErr != nil {
-		var er responses.ErrorResponse
 		er.Respond(w, 500, "error", fetchErr.Error())
 		return
 	}
@@ -128,7 +125,6 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 		var bourbon models.Bourbon
 		err := cursor.Decode(&bourbon)
 		if err != nil {
-			var er responses.ErrorResponse
 			er.Respond(w, 500, "error", err.Error())
 			return
 		}
@@ -139,7 +135,6 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if cursErr := cursor.Err(); cursErr != nil {
-		var er responses.ErrorResponse
 		er.Respond(w, 500, "error", cursErr.Error())
 		return
 	}
@@ -148,25 +143,24 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 			Bourbons:     bourbons,
 			TotalRecords: int(count),
 		}
-		var successResponse responses.StandardResponse
-		successResponse.Respond(w, 200, "success", br)
+		sr.Respond(w, 200, "success", br)
 	} else {
-		var errResponse responses.ErrorResponse
 		nfError := errors.New("not found")
-		errResponse.Respond(w, 404, "error", nfError.Error())
+		er.Respond(w, 404, "error", nfError.Error())
 	}
 
 }
 
 // GetRandomBourbon gets a random bourbon from the db using a aggregation pipe $sample
 func GetRandomBourbon(w http.ResponseWriter, r *http.Request) {
+	var er responses.ErrorResponse
+	var sr responses.StandardResponse
 	pipeline := []bson.M{bson.M{"$sample": bson.M{"size": 1}}}
 	cursor, err := bourbonsCollection.Aggregate(
 		context.TODO(),
 		pipeline,
 	)
 	if err != nil {
-		var er responses.ErrorResponse
 		er.Respond(w, 500, "error", err.Error())
 		return
 	}
@@ -175,22 +169,18 @@ func GetRandomBourbon(w http.ResponseWriter, r *http.Request) {
 	for cursor.Next(context.TODO()) {
 		err := cursor.Decode(&bourbon)
 		if err != nil {
-			var er responses.ErrorResponse
 			er.Respond(w, 500, "error", err.Error())
 			return
 		}
 	}
 	if err := cursor.Err(); err != nil {
-		var er responses.ErrorResponse
 		er.Respond(w, 500, "error", err.Error())
 		return
 	}
 	if bourbon.Title != "" {
-		var br responses.StandardResponse
-		br.Respond(w, 200, "success", bourbon)
+		sr.Respond(w, 200, "success", bourbon)
 	} else {
 		err = errors.New("not found")
-		var er responses.ErrorResponse
 		er.Respond(w, 404, "error", err.Error())
 	}
 
@@ -198,12 +188,13 @@ func GetRandomBourbon(w http.ResponseWriter, r *http.Request) {
 
 // GetBourbonById gets a bourbon from the db using the ID passed in url params
 func GetBourbonById(w http.ResponseWriter, r *http.Request) {
+	var er responses.ErrorResponse
+	var sr responses.StandardResponse
 	params := mux.Vars(r)
 	id := params["id"]
 	// convert id string to ObjectId
 	objectId, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
-		var er responses.ErrorResponse
 		er.Respond(w, 500, "error", err.Error())
 		return
 	}
@@ -214,16 +205,13 @@ func GetBourbonById(w http.ResponseWriter, r *http.Request) {
 		filter,
 	).Decode(&bourbon)
 	if err != nil {
-		var er responses.ErrorResponse
 		er.Respond(w, 400, "error", err.Error())
 		return
 	}
 	if bourbon.Title != "" {
-		var br responses.StandardResponse
-		br.Respond(w, 200, "success", bourbon)
+		sr.Respond(w, 200, "success", bourbon)
 	} else {
 		err = errors.New("not found")
-		var er responses.ErrorResponse
 		er.Respond(w, 404, "error", err.Error())
 	}
 
