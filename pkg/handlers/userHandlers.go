@@ -11,7 +11,6 @@ import (
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/responses"
 	"github.com/golang-jwt/jwt"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/crypto/bcrypt"
 	"io/ioutil"
 	"net/http"
@@ -78,10 +77,9 @@ func findByCredentials(email, password string) (
 }
 
 func CreateUser(w http.ResponseWriter, r *http.Request) {
-	userFromCtx := r.Context().Value("user")
-	newUser := userFromCtx.(*models.User)
+	newUser := r.Context().Value("user").(*models.User)
 	tokenFromCtx := newUser.Tokens[0].Token
-	_, err := usersCollection.InsertOne(context.TODO(), userFromCtx)
+	_, err := usersCollection.InsertOne(context.TODO(), newUser)
 	if err != nil {
 		var er responses.ErrorResponse
 		er.Respond(w, 500, "error", err.Error())
@@ -148,10 +146,9 @@ func LoginUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func LogoutUser(w http.ResponseWriter, r *http.Request) {
-	authFromCtx := r.Context().Value("authContext")
-	auth := authFromCtx.(*models.AuthContext)
-	id, _ := primitive.ObjectIDFromHex(auth.UserId)
-	t := auth.Token
+	ctx := r.Context().Value("authContext").(*models.AuthContext)
+	id := ctx.UserId
+	t := ctx.Token
 	filter := bson.D{{"_id", id}, {"tokens.token", t}}
 	update := bson.M{"$pull": bson.M{"tokens": bson.D{{"token", t}}}}
 	result, err := usersCollection.UpdateOne(context.TODO(), filter, update)

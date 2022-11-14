@@ -41,19 +41,26 @@ func bourbonUpdateValid(b []*models.Bourbon, id primitive.ObjectID, uType string
 }
 
 func CreateController(rBody []byte, uId primitive.ObjectID, uName string, cType string) (ControlStuct, responses.ErrorResponse) {
-	var collectionToUse *mongo.Collection
+	var result ControlStuct
 	var definedError responses.ErrorResponse
-	// collection models
+	collMap := map[string]*mongo.Collection{
+		"collection": collectionsCollection,
+		"wishlist":   wishlistsCollection,
+	}
+	collectionToUse := collMap[cType]
+	if collectionToUse == nil {
+		definedError.Build(400, "error", "bad request")
+		return result, definedError
+	}
+	// collection/wishlist overlapping models
 	var cr models.CollectionRequest
 	var cm models.Collection
 	var uCRef models.UserCollectionRef
-	// wishlist specific userRef
+	// wishlist unique/specific userRef
 	var uWRef models.UserWishlistRef
 	// User
 	var u models.User
-	var result ControlStuct
 	// filters, updates, and opts
-	var update bson.M
 	filter := bson.M{"_id": uId}
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
 	json.Unmarshal(rBody, &cr)
@@ -61,13 +68,14 @@ func CreateController(rBody []byte, uId primitive.ObjectID, uName string, cType 
 	cm.Build(uId, uName, cr.Name, cr.Private)
 	if cType == "collection" {
 		uCRef.Build(cm.ID, cm.Name)
-		collectionToUse = collectionsCollection
-		update = bson.M{"$push": bson.M{"collections": uCRef}}
 	} else {
 		uWRef.Build(cm.ID, cm.Name)
-		collectionToUse = wishlistsCollection
-		update = bson.M{"$push": bson.M{"wishlists": uWRef}}
 	}
+	typeQueryMap := map[string]bson.M{
+		"collection": {"$push": bson.M{"collections": uCRef}},
+		"wishlist":   {"$push": bson.M{"wishlists": uWRef}},
+	}
+	update := typeQueryMap[cType]
 	_, err := collectionToUse.InsertOne(context.TODO(), cm)
 	if err != nil {
 		definedError.Build(500, "error", err.Error())
@@ -88,17 +96,23 @@ func CreateController(rBody []byte, uId primitive.ObjectID, uName string, cType 
 // DeleteController is a reusable function between collections and wishlists for deleting
 // both full collection or wishlist document as well as the user reference document
 func DeleteController(cId, uId primitive.ObjectID, cType string) (models.User, responses.ErrorResponse) {
-	var collectionToUse *mongo.Collection
-	var definedError responses.ErrorResponse
-	var update bson.M
 	var u models.User
-	if cType == "collection" {
-		collectionToUse = collectionsCollection
-		update = bson.M{"$pull": bson.M{"collections": bson.M{"collection_id": cId}}}
-	} else {
-		collectionToUse = wishlistsCollection
-		update = bson.M{"$pull": bson.M{"wishlists": bson.M{"wishlist_id": cId}}}
+	var definedError responses.ErrorResponse
+	collMap := map[string]*mongo.Collection{
+		"collection": collectionsCollection,
+		"wishlist":   wishlistsCollection,
 	}
+	collectionToUse := collMap[cType]
+	if collectionToUse == nil {
+		definedError.Build(400, "error", "bad request")
+		return u, definedError
+	}
+	typeQueryMap := map[string]bson.M{
+		"collection": {"$pull": bson.M{"collections": bson.M{"collection_id": cId}}},
+		"wishlist":   {"$pull": bson.M{"wishlists": bson.M{"wishlist_id": cId}}},
+	}
+
+	update := typeQueryMap[cType]
 	filter := bson.M{"_id": cId, "user.id": uId}
 	result, err := collectionToUse.DeleteOne(context.TODO(), filter)
 	if err != nil {
@@ -124,36 +138,37 @@ func DeleteController(cId, uId primitive.ObjectID, cType string) (models.User, r
 }
 
 func UpdateController(rBody []byte, cId, uId primitive.ObjectID, cType string) (ControlStuct, responses.ErrorResponse) {
-	var collectionToUse *mongo.Collection
+	var result ControlStuct
 	var definedError responses.ErrorResponse
+	collMap := map[string]*mongo.Collection{
+		"collection": collectionsCollection,
+		"wishlist":   wishlistsCollection,
+	}
+	collectionToUse := collMap[cType]
+	if collectionToUse == nil {
+		definedError.Build(400, "error", "bad request")
+		return result, definedError
+	}
 	// collection models
 	var cr models.CollectionRequest
 	var cm models.Collection
-	var uCRef models.UserCollectionRef
-	// wishlist specific userRef
-	var uWRef models.UserWishlistRef
 	// User
 	var u models.User
 	var uFilter bson.M
 	var uUpdate bson.M
-	var result ControlStuct
 	json.Unmarshal(rBody, &cr)
 	cr.FillDefaults()
+	typeFilterMap := map[string][]bson.M{
+		"collection": {{"_id": uId, "collections.collection_id": cId}, {"$set": bson.M{"collections.$.collection_name": cr.Name}}},
+		"wishlist":   {{"_id": uId, "wishlists.wishlist_id": cId}, {"$set": bson.M{"wishlists.$.wishlist_name": cr.Name}}},
+	}
 	// filters, updates, and opts
 	cFilter := bson.M{"_id": cId}
-	cUpdate := []bson.D{bson.D{{"$set", bson.D{{"name", cr.Name}, {"private", cr.Private}}}}}
+	cUpdate := []bson.D{{{"$set", bson.D{{"name", cr.Name}, {"private", cr.Private}}}}}
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
-	if cType == "collection" {
-		uCRef.Build(cId, cr.Name)
-		uFilter = bson.M{"_id": uId, "collections.collection_id": cId}
-		uUpdate = bson.M{"$set": bson.M{"collections.$.collection_name": cr.Name}}
-		collectionToUse = collectionsCollection
-	} else {
-		uWRef.Build(cId, cr.Name)
-		uFilter = bson.M{"_id": uId, "wishlists.wishlist_id": cId}
-		uUpdate = bson.M{"$set": bson.M{"wishlists.$.wishlist_name": cr.Name}}
-		collectionToUse = wishlistsCollection
-	}
+	uFilter = typeFilterMap[cType][0]
+	uUpdate = typeFilterMap[cType][1]
+
 	err := collectionToUse.FindOneAndUpdate(context.TODO(), cFilter, cUpdate, opts).Decode(&cm)
 	if err != nil {
 		definedError.Build(400, "error", err.Error())
@@ -194,31 +209,29 @@ func ExistsAndUpdateController(cId, bId, uId primitive.ObjectID, action, cType s
 		definedError.Build(400, "error", err.Error())
 		return result, definedError
 	}
-	var collectionToUse *mongo.Collection
+	collMap := map[string]*mongo.Collection{
+		"collection": collectionsCollection,
+		"wishlist":   wishlistsCollection,
+	}
+	collectionToUse := collMap[cType]
+	if collectionToUse == nil {
+		definedError.Build(400, "error", "bad request")
+		return result, definedError
+	}
 	// general collection group update and filter queries
-	cUpdate := bson.M{"$push": bson.M{"bourbons": b}}                   // update for collection and wishlist bourbons array
+	operator := "$push"
+	if action != "add" {
+		operator = "$pull"
+	}
+	cUpdate := bson.M{operator: bson.M{"bourbons": b}}                  // update for collection and wishlist bourbons array
 	filter := bson.M{"_id": cId, "user.id": uId}                        // general filter
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After) // general options
-	var uUpdate bson.M
-	var uFilter bson.M
-	if action != "add" {
-		cUpdate = bson.M{"$pull": bson.M{"bourbons": bson.M{"_id": b.ID}}}
+	typeQueryMap := map[string][]bson.M{
+		"collection": {{"_id": uId, "collections.collection_id": cId}, {operator: bson.M{"collections.$.bourbons": bRef}}},
+		"wishlist":   {{"_id": uId, "wishlists.wishlist_id": cId}, {operator: bson.M{"wishlists.$.bourbons": bRef}}},
 	}
-	if cType == "collection" {
-		collectionToUse = collectionsCollection
-		uFilter = bson.M{"_id": uId, "collections.collection_id": cId}
-		uUpdate = bson.M{"$push": bson.M{"collections.$.bourbons": bRef}}
-		if action != "add" {
-			uUpdate = bson.M{"$pull": bson.M{"collections.$.bourbons": bRef}}
-		}
-	} else {
-		collectionToUse = wishlistsCollection
-		uFilter = bson.M{"_id": uId, "wishlists.wishlist_id": cId}
-		uUpdate = bson.M{"$push": bson.M{"wishlists.$.bourbons": bRef}}
-		if action != "add" {
-			uUpdate = bson.M{"$pull": bson.M{"wishlists.$.bourbons": bRef}}
-		}
-	}
+	uFilter := typeQueryMap[cType][0]
+	uUpdate := typeQueryMap[cType][1]
 	dErr := collectionToUse.FindOne(context.TODO(), filter).Decode(&cm)
 	if dErr != nil {
 		definedError.Build(400, "error", dErr.Error())

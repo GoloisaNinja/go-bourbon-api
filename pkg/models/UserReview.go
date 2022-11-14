@@ -11,3 +11,13 @@ type UserReview struct {
 	ReviewScore string             `bson:"reviewScore" json:"reviewScore"`
 	ReviewText  string             `bson:"reviewText" json:"reviewText"`
 }
+
+func (r *UserReview) Build(b Bourbon, uId primitive.ObjectID, uname string) {
+	r.ID = primitive.NewObjectID()
+	r.User = &UserRef{
+		ID:       uId,
+		Username: uname,
+	}
+	r.BourbonName = b.Title
+	r.BourbonID = b.ID
+}

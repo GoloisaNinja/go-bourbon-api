@@ -15,8 +15,8 @@ func (u *UserCollectionRef) Build(cId primitive.ObjectID, n string) {
 }
 
 type UserReviewRef struct {
-	ReviewID    string `bson:"review_id" json:"review_id"`
-	ReviewTitle string `bson:"review_title" json:"review_title"`
+	ReviewID    primitive.ObjectID `bson:"review_id" json:"review_id"`
+	ReviewTitle string             `bson:"review_title" json:"review_title"`
 }
 
 type UserWishlistRef struct {

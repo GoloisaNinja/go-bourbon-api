@@ -46,13 +46,17 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		func(w http.ResponseWriter, r *http.Request) {
 			// extract token from request header under "Authorization" where
 			// token is formatted as "Bearer: <token>"
+			var er responses.ErrorResponse
 			x, err := regexp.Compile(`^(?P<B>Bearer\s+)(?P<T>.*)$`)
 			if err != nil {
-				var er responses.ErrorResponse
 				er.Respond(w, 401, "error", "unauthorized")
 				return
 			}
 			authHeader := x.FindStringSubmatch(r.Header.Get("Authorization"))
+			if len(authHeader) != 3 {
+				er.Respond(w, 401, "error", "unauthorized")
+				return
+			}
 			tokenIndex := x.SubexpIndex("T")
 			tokenString := authHeader[tokenIndex]
 			// verify the token
@@ -68,7 +72,6 @@ func AuthMiddleware(next http.Handler) http.Handler {
 				},
 			)
 			if vErr != nil {
-				var er responses.ErrorResponse
 				er.Respond(w, 401, "error", "unauthorized")
 				return
 			}
@@ -77,9 +80,24 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			if claimOk && token.Valid {
 				userId = claims["UserId"].(string)
 			}
+			userIdAsPrimitive, iErr := primitive.ObjectIDFromHex(userId)
+			if iErr != nil {
+				er.Respond(w, 500, "error", iErr.Error())
+				return
+			}
+			// get a full user to include the username in the context to alleviate pulling
+			// a full user in certain handlers that only need a username for a ref
+			var user models.User
+			filter := bson.M{"_id": userIdAsPrimitive}
+			uErr := usersCollection.FindOne(context.TODO(), filter).Decode(&user)
+			if uErr != nil {
+				er.Respond(w, 500, "error", uErr.Error())
+				return
+			}
 			authContext := models.AuthContext{
-				UserId: userId,
-				Token:  tokenString,
+				UserId:   userIdAsPrimitive,
+				Username: user.Username,
+				Token:    tokenString,
 			}
 			ctx := context.WithValue(r.Context(), "authContext", &authContext)
 			next.ServeHTTP(w, r.WithContext(ctx))

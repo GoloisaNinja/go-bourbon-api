@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/db"
-	"github.com/GoloisaNinja/go-bourbon-api/pkg/helpers"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/models"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/responses"
 	"github.com/gorilla/mux"
@@ -21,46 +20,42 @@ var collectionsCollection = db.GetCollection(
 )
 var wishlistsCollection = db.GetCollection(db.DB, "wishlists")
 
-// GetCollectionById returns a collection - if the collection is
+// GetCollectionTypeById returns a collection/wishlist - if the collection is
 // private then the user making the request must be the owner of
-// the collection
-func GetCollectionById(w http.ResponseWriter, r *http.Request) {
+// the collection - collection to be used is dependent on cType from router params
+func GetCollectionTypeById(w http.ResponseWriter, r *http.Request) {
 	// params id contains collection id
 	params := mux.Vars(r)
-	collectionId, _ := primitive.ObjectIDFromHex(params["id"])
 	cType, _ := params["cType"]
+	// request cType map
+	rMap := map[string]*mongo.Collection{
+		"collection": collectionsCollection,
+		"wishlist":   wishlistsCollection,
+	}
+	var collectionToUse *mongo.Collection
 	var er responses.ErrorResponse
-	if cType != "collection" && cType != "wishlist" {
+	collectionToUse = rMap[cType]
+	if collectionToUse == nil {
 		er.Respond(w, 404, "error", "not found")
 		return
 	}
+	id, _ := primitive.ObjectIDFromHex(params["id"])
 	// auth middleware context - need user id to continue
-	id, iErr := helpers.GetUserIdFromAuthCtx(r.Context())
-	if iErr != nil {
-		er.Respond(w, 500, "error", iErr.Error())
-		return
-	}
-	var collection models.Collection
-	var collectionToUse *mongo.Collection
-	if cType == "collection" {
-		collectionToUse = collectionsCollection
-	} else {
-		collectionToUse = wishlistsCollection
-	}
-	filter := bson.M{"_id": collectionId}
-	err := collectionToUse.FindOne(context.TODO(), filter).Decode(&collection)
+	ctx := r.Context().Value("authContext").(*models.AuthContext)
+	uId := ctx.UserId
+	var cm models.Collection
+	var sr responses.StandardResponse
+	filter := bson.M{"_id": id}
+	err := collectionToUse.FindOne(context.TODO(), filter).Decode(&cm)
 	if err != nil {
 		er.Respond(w, 400, "error", err.Error())
 		return
 	}
-	if collection.Private {
-		if collection.User.ID != id {
-			er.Respond(w, 401, "error", "unauthorized")
-			return
-		}
+	if cm.Private && cm.User.ID != uId {
+		er.Respond(w, 401, "error", "unauthorized")
+		return
 	}
-	var cr responses.StandardResponse
-	cr.Respond(w, 200, "success", collection)
+	sr.Respond(w, 200, "success", cm)
 }
 
 // CreateCollection creates a new collection in the collections collection
@@ -74,22 +69,12 @@ func CreateCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// auth middleware context - need user id to continue
-	id, iErr := helpers.GetUserIdFromAuthCtx(r.Context())
-	if iErr != nil {
-		er.Respond(w, 500, "error", iErr.Error())
-		return
-	}
-	// get the user from the database
-	filter := bson.M{"_id": id}
-	var user models.User
-	uErr := usersCollection.FindOne(context.TODO(), filter).Decode(&user)
-	if uErr != nil {
-		er.Respond(w, 500, "error", uErr.Error())
-		return
-	}
+	ctx := r.Context().Value("authContext").(*models.AuthContext)
+	id := ctx.UserId
+	username := ctx.Username
 	// get the request body
 	rBody, _ := ioutil.ReadAll(r.Body)
-	controlStruct, err := CreateController(rBody, user.ID, user.Username, cType)
+	controlStruct, err := CreateController(rBody, id, username, cType)
 	if err.Status != 0 {
 		err.Respond(w, err.Status, err.Message, err.Data)
 		return
@@ -105,12 +90,10 @@ func CreateCollection(w http.ResponseWriter, r *http.Request) {
 		cr.Collection = &cm
 		cr.UserCollections = um.Collections
 		sr.Respond(w, 200, "success", cr)
-		return
 	} else {
 		wr.Wishlist = &cm
 		wr.UserWishlists = um.Wishlists
 		sr.Respond(w, 200, "success", wr)
-		return
 	}
 }
 
@@ -124,11 +107,8 @@ func UpdateCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// user id is in the context from auth middleware
-	userId, uErr := helpers.GetUserIdFromAuthCtx(r.Context())
-	if uErr != nil {
-		er.Respond(w, 500, "error", uErr.Error())
-		return
-	}
+	ctx := r.Context().Value("authContext").(*models.AuthContext)
+	userId := ctx.UserId
 	rBody, _ := ioutil.ReadAll(r.Body)
 	controlStuct, err := UpdateController(rBody, collectionId, userId, cType)
 	if err.Status != 0 {
@@ -146,12 +126,10 @@ func UpdateCollection(w http.ResponseWriter, r *http.Request) {
 		cr.Collection = &cm
 		cr.UserCollections = um.Collections
 		sr.Respond(w, 200, "success", cr)
-		return
 	} else {
 		wr.Wishlist = &cm
 		wr.UserWishlists = um.Wishlists
 		sr.Respond(w, 200, "success", wr)
-		return
 	}
 }
 
@@ -169,11 +147,8 @@ func DeleteCollection(w http.ResponseWriter, r *http.Request) {
 		er.Respond(w, 404, "error", "not found")
 		return
 	}
-	userId, uErr := helpers.GetUserIdFromAuthCtx(r.Context())
-	if uErr != nil {
-		er.Respond(w, 500, "error", uErr.Error())
-		return
-	}
+	ctx := r.Context().Value("authContext").(*models.AuthContext)
+	userId := ctx.UserId
 	user, err := DeleteController(collectionId, userId, cType)
 	if err.Status != 0 {
 		err.Respond(w, err.Status, err.Message, err.Data)
@@ -182,7 +157,6 @@ func DeleteCollection(w http.ResponseWriter, r *http.Request) {
 	var sr responses.StandardResponse
 	if cType == "collection" {
 		sr.Respond(w, 200, "success", user.Collections)
-		return
 	} else {
 		sr.Respond(w, 200, "success", user.Wishlists)
 	}
@@ -208,11 +182,8 @@ func UpdateBourbonsInCollection(w http.ResponseWriter, r *http.Request) {
 		er.Respond(w, 404, "error", "not found")
 		return
 	}
-	userId, uErr := helpers.GetUserIdFromAuthCtx(r.Context())
-	if uErr != nil {
-		er.Respond(w, 500, "error", uErr.Error())
-		return
-	}
+	ctx := r.Context().Value("authContext").(*models.AuthContext)
+	userId := ctx.UserId
 	// ExistsAndUpdateController order of operations:
 	// does the bourbon exist -> does the collection exist and belong to the user
 	// does the bourbon already exist in the collection -> if yes/yes/no -> success
@@ -233,11 +204,9 @@ func UpdateBourbonsInCollection(w http.ResponseWriter, r *http.Request) {
 		cr.Collection = &cm
 		cr.UserCollections = um.Collections
 		sr.Respond(w, 200, "success", cr)
-		return
 	} else {
 		wr.Wishlist = &cm
 		wr.UserWishlists = um.Wishlists
 		sr.Respond(w, 200, "success", wr)
-		return
 	}
 }

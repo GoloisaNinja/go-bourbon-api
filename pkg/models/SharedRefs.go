@@ -25,3 +25,9 @@ func (c *CollectionRequest) FillDefaults() {
 		c.Name = "Unnamed Collection"
 	}
 }
+
+type ReviewRequest struct {
+	ReviewTitle string `json:"reviewTitle"`
+	ReviewScore string `json:"reviewScore"`
+	ReviewText  string `json:"reviewText"`
+}

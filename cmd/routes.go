@@ -29,7 +29,7 @@ func routes() http.Handler {
 
 	// base database collection type handlers for collections and wishlists
 	// handlers manage both database collection document types by extracting a cType from router params
-	getCollectionById := http.HandlerFunc(handlers.GetCollectionById)
+	getCollectionTypeById := http.HandlerFunc(handlers.GetCollectionTypeById)
 	createCollection := http.HandlerFunc(handlers.CreateCollection)
 	updateCollection := http.HandlerFunc(handlers.UpdateCollection)
 	deleteCollection := http.HandlerFunc(handlers.DeleteCollection)
@@ -70,7 +70,7 @@ func routes() http.Handler {
 		"/api/{cType}", middleware.AuthMiddleware(createCollection),
 	).Methods("POST")
 	// get a collection or wishlist collection by id based on cType param
-	r.Handle("/api/{cType}/{id}", middleware.AuthMiddleware(getCollectionById)).Methods("GET")
+	r.Handle("/api/{cType}/{id}", middleware.AuthMiddleware(getCollectionTypeById)).Methods("GET")
 	// delete an existing collection or wishlist based on cType param
 	r.Handle(
 		"/api/{cType}/{id}", middleware.AuthMiddleware(deleteCollection),

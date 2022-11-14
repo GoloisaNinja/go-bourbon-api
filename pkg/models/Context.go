@@ -1,6 +1,9 @@
 package models
 
+import "go.mongodb.org/mongo-driver/bson/primitive"
+
 type AuthContext struct {
-	UserId string
-	Token  string
+	UserId   primitive.ObjectID
+	Username string
+	Token    string
 }

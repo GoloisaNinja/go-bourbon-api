@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/db"
-	"github.com/GoloisaNinja/go-bourbon-api/pkg/helpers"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/models"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/responses"
 	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"io/ioutil"
 	"net/http"
 )
@@ -82,26 +82,30 @@ func GetAllReviewsByFilterId(w http.ResponseWriter, r *http.Request) {
 
 func CreateReview(w http.ResponseWriter, r *http.Request) {
 	var er responses.ErrorResponse
+	// user models
 	var user models.User
-	var uRef models.UserRef
+	// review models
+	var rRef models.UserReviewRef
 	var review models.UserReview
+	// bourbon model
+	var bourbon models.Bourbon
+	// response models
+	var rr responses.ReviewResponse
 	var sr responses.StandardResponse
-	userId, err := helpers.GetUserIdFromAuthCtx(r.Context())
-	if err != nil {
-		er.Respond(w, 500, "error", err.Error())
-		return
-	}
-	filter := bson.M{"_id": userId}
-	uErr := usersCollection.FindOne(context.TODO(), filter).Decode(&user)
-	if uErr != nil {
-		er.Respond(w, 500, "error", uErr.Error())
-		return
-	}
-	uRef.ID = user.ID
-	uRef.Username = user.Username
+	// pull userId and username from context
+	ctx := r.Context().Value("authContext").(*models.AuthContext)
+	userId := ctx.UserId
+	username := ctx.Username
 	rBody, _ := ioutil.ReadAll(r.Body)
 	json.Unmarshal(rBody, &review)
-	rFilter := bson.M{"bourbon_id": review.BourbonID, "user.id": user.ID}
+	// check the bourbon_id against the bourbons in the db - is it a valid id?
+	bFilter := bson.M{"_id": review.BourbonID}
+	bErr := bourbonsCollection.FindOne(context.TODO(), bFilter).Decode(&bourbon)
+	if bErr != nil {
+		er.Respond(w, 404, "error", "bourbon to be reviewed not found")
+		return
+	}
+	rFilter := bson.M{"bourbon_id": review.BourbonID, "user.id": userId}
 	count, cErr := reviewsCollection.CountDocuments(context.TODO(), rFilter)
 	if cErr != nil {
 		er.Respond(w, 500, "error", cErr.Error())
@@ -111,12 +115,26 @@ func CreateReview(w http.ResponseWriter, r *http.Request) {
 		er.Respond(w, 400, "error", "user already reviewed this bourbon")
 		return
 	}
-	review.ID = primitive.NewObjectID()
-	review.User = &uRef
+	review.Build(bourbon, userId, username)
+	// user ref for the review model
+	// insert the review from the request
 	_, rErr := reviewsCollection.InsertOne(context.TODO(), review)
 	if rErr != nil {
 		er.Respond(w, 500, "error", rErr.Error())
 		return
 	}
-	sr.Respond(w, 200, "success", review)
+	// review ref needed for the user model
+	rRef.ReviewID = review.ID
+	rRef.ReviewTitle = review.ReviewTitle
+	uFilter := bson.M{"_id": userId}
+	uUpdate := bson.M{"$push": bson.M{"reviews": rRef}}
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	uErr := usersCollection.FindOneAndUpdate(context.TODO(), uFilter, uUpdate, opts).Decode(&user)
+	if uErr != nil {
+		er.Respond(w, 500, "error", uErr.Error())
+		return
+	}
+	rr.Review = &review
+	rr.UserReviews = user.Reviews
+	sr.Respond(w, 200, "success", rr)
 }
