@@ -138,3 +138,81 @@ func CreateReview(w http.ResponseWriter, r *http.Request) {
 	rr.UserReviews = user.Reviews
 	sr.Respond(w, 200, "success", rr)
 }
+
+func DeleteReview(w http.ResponseWriter, r *http.Request) {
+	var er responses.ErrorResponse
+	var user models.User
+	var sr responses.StandardResponse
+	params := mux.Vars(r)
+	reviewId, err := primitive.ObjectIDFromHex(params["id"])
+	if err != nil {
+		er.Respond(w, 400, "error", err.Error())
+		return
+	}
+	ctx := r.Context().Value("authContext").(*models.AuthContext)
+	userId := ctx.UserId
+	filter := bson.M{"_id": reviewId, "user.id": userId}
+	result, rErr := reviewsCollection.DeleteOne(context.TODO(), filter)
+	if rErr != nil {
+		er.Respond(w, 500, "error", rErr.Error())
+		return
+	}
+	if result.DeletedCount == 0 {
+		er.Respond(w, 404, "error", "no review with that id could be deleted")
+		return
+	}
+	rFilter := bson.M{"_id": userId, "reviews.review_id": reviewId}
+	rUpdate := bson.M{"$pull": bson.M{"reviews": bson.M{"review_id": reviewId}}}
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	uErr := usersCollection.FindOneAndUpdate(context.TODO(), rFilter, rUpdate, opts).Decode(&user)
+	if uErr != nil {
+		er.Respond(w, 500, "error", uErr.Error())
+		return
+	}
+	sr.Respond(w, 200, "success", user.Reviews)
+}
+
+func UpdateReview(w http.ResponseWriter, r *http.Request) {
+	var er responses.ErrorResponse
+	var rReq models.ReviewRequest
+	var review models.UserReview
+	var user models.User
+	var rr responses.ReviewResponse
+	var sr responses.StandardResponse
+	params := mux.Vars(r)
+	reviewId, err := primitive.ObjectIDFromHex(params["id"])
+	if err != nil {
+		er.Respond(w, 400, "error", err.Error())
+		return
+	}
+	ctx := r.Context().Value("authContext").(*models.AuthContext)
+	userId := ctx.UserId
+	rBody, iErr := ioutil.ReadAll(r.Body)
+	if iErr != nil {
+		er.Respond(w, 500, "error", iErr.Error())
+		return
+	}
+	json.Unmarshal(rBody, &rReq)
+	if rReq.ReviewScore == "" || rReq.ReviewText == "" || rReq.ReviewTitle == "" {
+		er.Respond(w, 400, "error", "bad request")
+		return
+	}
+	filter := bson.M{"_id": reviewId, "user.id": userId}
+	update := bson.M{"$set": bson.M{"reviewTitle": rReq.ReviewTitle, "reviewScore": rReq.ReviewScore, "reviewText": rReq.ReviewText}}
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	rUpErr := reviewsCollection.FindOneAndUpdate(context.TODO(), filter, update, opts).Decode(&review)
+	if rUpErr != nil {
+		er.Respond(w, 500, "error", rUpErr.Error())
+		return
+	}
+	uFilter := bson.M{"_id": userId, "reviews.review_id": reviewId}
+	uRefUpdate := bson.M{"$set": bson.M{"reviews.$.review_title": rReq.ReviewTitle}}
+	uRefUpErr := usersCollection.FindOneAndUpdate(context.TODO(), uFilter, uRefUpdate, opts).Decode(&user)
+	if uRefUpErr != nil {
+		er.Respond(w, 500, "error", uRefUpErr.Error())
+		return
+	}
+	rr.Review = &review
+	rr.UserReviews = user.Reviews
+	sr.Respond(w, 200, "success", rr)
+}

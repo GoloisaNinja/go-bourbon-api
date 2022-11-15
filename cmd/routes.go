@@ -37,6 +37,8 @@ func routes() http.Handler {
 
 	// review handlers
 	createReview := http.HandlerFunc(handlers.CreateReview)
+	deleteReview := http.HandlerFunc(handlers.DeleteReview)
+	updateReview := http.HandlerFunc(handlers.UpdateReview)
 
 	// define routes
 
@@ -61,8 +63,14 @@ func routes() http.Handler {
 	// review routes
 	// create a review
 	r.Handle("/api/review", middleware.AuthMiddleware(createReview)).Methods("POST")
+	// get a single review by id
 	r.HandleFunc("/api/review/{id}", handlers.GetReviewById).Methods("GET")
+	// get all reviews by a filter type (either by bourbon id or by user id)
 	r.HandleFunc("/api/reviews/{fType}/{id}", handlers.GetAllReviewsByFilterId).Methods("GET")
+	// delete a review by id - auth route - user requesting delete must be owner of review
+	r.Handle("/api/review/delete/{id}", middleware.AuthMiddleware(deleteReview)).Methods("DELETE")
+	// update a single review
+	r.Handle("/api/review/update/{id}", middleware.AuthMiddleware(updateReview)).Methods("POST")
 
 	// **database collections routes (collection & wishlist cTypes)**
 	// create a new collection or wishlist based on cType param
