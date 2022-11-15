@@ -95,8 +95,8 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 	//matchStage := bson.D{{"$match", bson.D{{"title", sr}}}}
 	// boss level matchStage that incorporates title, bottler, distiller
 	orStage := []bson.D{
-		bson.D{{"title", sr}}, bson.D{{"bottler", sr}},
-		bson.D{{"distiller", sr}},
+		bson.D{{"title", pr}}, bson.D{{"bottler", pr}},
+		bson.D{{"distiller", pr}},
 	}
 	matchStage := bson.D{{"$match", bson.D{{"$or", orStage}}}}
 	sortStage := bson.D{{"$sort", bson.D{{sortQuery, sortDirection}}}}
