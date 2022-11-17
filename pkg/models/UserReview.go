@@ -1,6 +1,9 @@
 package models
 
-import "go.mongodb.org/mongo-driver/bson/primitive"
+import (
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"time"
+)
 
 type UserReview struct {
 	ID          primitive.ObjectID `bson:"_id" json:"_id,omitempty"`
@@ -10,6 +13,8 @@ type UserReview struct {
 	ReviewTitle string             `bson:"reviewTitle" json:"reviewTitle"`
 	ReviewScore string             `bson:"reviewScore" json:"reviewScore"`
 	ReviewText  string             `bson:"reviewText" json:"reviewText"`
+	CreatedAt   primitive.DateTime `bson:"createdAt" json:"createdAt"`
+	UpdatedAt   primitive.DateTime `bson:"updatedAt" json:"updatedAt"`
 }
 
 func (r *UserReview) Build(b Bourbon, uId primitive.ObjectID, uname string) {
@@ -20,4 +25,6 @@ func (r *UserReview) Build(b Bourbon, uId primitive.ObjectID, uname string) {
 	}
 	r.BourbonName = b.Title
 	r.BourbonID = b.ID
+	r.CreatedAt = primitive.NewDateTimeFromTime(time.Now())
+	r.UpdatedAt = primitive.NewDateTimeFromTime(time.Now())
 }

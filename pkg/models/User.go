@@ -1,6 +1,9 @@
 package models
 
-import "go.mongodb.org/mongo-driver/bson/primitive"
+import (
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"time"
+)
 
 type UserCollectionRef struct {
 	CollectionID   primitive.ObjectID `bson:"collection_id" json:"collection_id"`
@@ -44,9 +47,25 @@ type User struct {
 	Reviews     []*UserReviewRef     `bson:"reviews" json:"reviews"`
 	Wishlists   []*UserWishlistRef   `bson:"wishlists" json:"wishlists"`
 	Tokens      []*UserTokenRef      `bson:"tokens" json:"-"`
+	CreatedAt   primitive.DateTime   `bson:"createdAt" json:"createdAt"`
+	UpdatedAt   primitive.DateTime   `bson:"updatedAt" json:"updatedAt"`
 }
 
-type UserLoginRequest struct {
+func (u *User) Build(i primitive.ObjectID, n, e, hp, t string) {
+	u.Username = n
+	u.Email = e
+	u.Password = hp
+	u.Collections = make([]*UserCollectionRef, 0)
+	u.Reviews = make([]*UserReviewRef, 0)
+	u.Wishlists = make([]*UserWishlistRef, 0)
+	u.Tokens = append(u.Tokens, &UserTokenRef{
+		Token: t,
+	})
+	u.CreatedAt = primitive.NewDateTimeFromTime(time.Now())
+	u.UpdatedAt = primitive.NewDateTimeFromTime(time.Now())
+}
+
+type RegisterUserRequest struct {
 	Username string `json:"username"`
 	Email    string `json:"email"`
 	Password string `json:"password"`

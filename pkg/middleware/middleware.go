@@ -49,12 +49,12 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			var er responses.ErrorResponse
 			x, err := regexp.Compile(`^(?P<B>Bearer\s+)(?P<T>.*)$`)
 			if err != nil {
-				er.Respond(w, 401, "error", "unauthorized")
+				er.Respond(w, 401, "error", "authorization failed")
 				return
 			}
 			authHeader := x.FindStringSubmatch(r.Header.Get("Authorization"))
 			if len(authHeader) != 3 {
-				er.Respond(w, 401, "error", "unauthorized")
+				er.Respond(w, 401, "error", "authorization process failed")
 				return
 			}
 			tokenIndex := x.SubexpIndex("T")
@@ -108,55 +108,42 @@ func AuthMiddleware(next http.Handler) http.Handler {
 func NewUserMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
+			var er responses.ErrorResponse
 			reqBody, _ := ioutil.ReadAll(r.Body)
-			var reqResult models.UserLoginRequest
+			var reqResult models.RegisterUserRequest
 			// try to unmarshal the request
 			err := json.Unmarshal(reqBody, &reqResult)
 			if err != nil {
-				var er responses.ErrorResponse
 				er.Respond(w, 400, "error", err.Error())
 				return
 			}
 			// check if the request had empty body
 			if reqResult.Email == "" || reqResult.Password == "" {
-				var er responses.ErrorResponse
 				er.Respond(w, 400, "error", err.Error())
 				return
 			}
 			validEmail := isValidEmail(reqResult.Email)
 			alreadyExists := isExistingUser(reqResult.Email)
 			if !validEmail || alreadyExists {
-				var er responses.ErrorResponse
 				er.Respond(w, 400, "error", "user or email invalid")
 				return
 			}
 			// hash new user password from request
 			hashed, hashErr := hashPassword(reqResult.Password)
 			if hashErr != nil {
-				var er responses.ErrorResponse
 				er.Respond(w, 500, "error", hashErr.Error())
+				return
 			}
-
 			var newUser models.User
-			newUser.ID = primitive.NewObjectID()
-			newUser.Username = reqResult.Username
-			newUser.Email = reqResult.Email
-			newUser.Password = hashed
-			newUser.Collections = make([]*models.UserCollectionRef, 0)
-			newUser.Reviews = make([]*models.UserReviewRef, 0)
-			newUser.Wishlists = make([]*models.UserWishlistRef, 0)
+			// generate our user primitive object Id
+			uid := primitive.NewObjectID()
 			// generate JWT
-			token, tErr := handlers.GenerateAuthToken(newUser.ID.Hex())
+			token, tErr := handlers.GenerateAuthToken(uid.Hex())
 			if tErr != nil {
-				var er responses.ErrorResponse
 				er.Respond(w, 500, "error", tErr.Error())
 				return
 			}
-			newUser.Tokens = append(
-				newUser.Tokens, &models.UserTokenRef{
-					Token: token,
-				},
-			)
+			newUser.Build(uid, reqResult.Username, reqResult.Email, hashed, token)
 			ctx := context.WithValue(r.Context(), "user", &newUser)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		},

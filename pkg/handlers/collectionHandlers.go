@@ -58,6 +58,61 @@ func GetCollectionTypeById(w http.ResponseWriter, r *http.Request) {
 	sr.Respond(w, 200, "success", cm)
 }
 
+func GetCollectionsType(w http.ResponseWriter, r *http.Request) {
+	// params id contains collection id
+	params := mux.Vars(r)
+	cType, _ := params["cType"]
+	// request cType map
+	rMap := map[string]*mongo.Collection{
+		"collections": collectionsCollection,
+		"wishlists":   wishlistsCollection,
+	}
+	var collectionToUse *mongo.Collection
+	var er responses.ErrorResponse
+	collectionToUse = rMap[cType]
+	if collectionToUse == nil {
+		er.Respond(w, 404, "error", "not found")
+		return
+	}
+	ctx := r.Context().Value("authContext").(*models.AuthContext)
+	userId := ctx.UserId
+	filter := bson.M{"user.id": userId}
+	cursor, err := collectionToUse.Find(context.TODO(), filter)
+	if err != nil {
+		er.Respond(w, 400, "error", err.Error())
+		return
+	}
+	var collections []*models.Collection
+	var wr responses.WishlistsResponse
+	var cr responses.CollectionsResponse
+	var sr responses.StandardResponse
+	defer cursor.Close(context.TODO())
+	for cursor.Next(context.TODO()) {
+		var collection *models.Collection
+		err := cursor.Decode(&collection)
+		if err != nil {
+			er.Respond(w, 500, "error", err.Error())
+			return
+		}
+		collections = append(collections, collection)
+	}
+	if cursErr := cursor.Err(); cursErr != nil {
+		er.Respond(w, 500, "error", cursErr.Error())
+		return
+	}
+	if len(collections) > 0 {
+		if cType == "collections" {
+			cr.Collections = collections
+			sr.Respond(w, 200, "success", cr)
+		} else {
+			wr.Wishlists = collections
+			sr.Respond(w, 200, "success", wr)
+		}
+	} else {
+		sr.Respond(w, 404, "error", "no collections exist")
+	}
+}
+
 // CreateCollection creates a new collection in the collections collection
 // and also adds a UserCollectionRef to the User that created it
 func CreateCollection(w http.ResponseWriter, r *http.Request) {

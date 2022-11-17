@@ -11,6 +11,7 @@ import (
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/responses"
 	"github.com/golang-jwt/jwt"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/crypto/bcrypt"
 	"io/ioutil"
 	"net/http"
@@ -85,27 +86,26 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		er.Respond(w, 500, "error", err.Error())
 		return
 	}
-	cleanResponse := responses.CleanUserResponse{
+	ur := responses.UserTokenResponse{
 		User:  newUser,
 		Token: tokenFromCtx,
 	}
-	var ur responses.StandardResponse
-	ur.Respond(w, 200, "success", cleanResponse)
+	var sr responses.StandardResponse
+	sr.Respond(w, 200, "success", ur)
 }
 
 func LoginUser(w http.ResponseWriter, r *http.Request) {
+	var er responses.ErrorResponse
 	reqBody, _ := ioutil.ReadAll(r.Body)
-	var req models.UserLoginRequest
+	var req models.RegisterUserRequest
 	reqErr := json.Unmarshal(reqBody, &req)
 	if reqErr != nil {
-		var er responses.ErrorResponse
 		er.Respond(w, 400, "error", reqErr.Error())
 		return
 	}
 	if req.Email == "" || req.
 		Password == "" {
 		missing := errors.New("bad request")
-		var er responses.ErrorResponse
 		er.Respond(w, 500, "error", missing.Error())
 		return
 	}
@@ -114,13 +114,11 @@ func LoginUser(w http.ResponseWriter, r *http.Request) {
 		req.Password,
 	)
 	if vError != nil {
-		var er responses.ErrorResponse
 		er.Respond(w, 401, "error", vError.Error())
 		return
 	}
 	token, tErr := GenerateAuthToken(verifiedUser.ID.Hex())
 	if tErr != nil {
-		var er responses.ErrorResponse
 		er.Respond(w, 500, "error", tErr.Error())
 		return
 	}
@@ -134,18 +132,27 @@ func LoginUser(w http.ResponseWriter, r *http.Request) {
 		tokenUpdate,
 	)
 	if uErr != nil {
-		var er responses.ErrorResponse
 		er.Respond(w, 500, "error", uErr.Error())
+		return
 	}
-	cleanResponse := responses.CleanUserResponse{
+	updatedTime := primitive.NewDateTimeFromTime(time.Now())
+	tUpdate := bson.M{"$set": bson.M{"updatedAt": updatedTime}}
+	_, tUErr := usersCollection.UpdateOne(context.TODO(), filter, tUpdate)
+	if tUErr != nil {
+		er.Respond(w, 500, "error", "updated failed")
+		return
+	}
+	ur := responses.UserTokenResponse{
 		User:  verifiedUser,
 		Token: token,
 	}
-	var ur responses.StandardResponse
-	ur.Respond(w, 200, "success", cleanResponse)
+	var sr responses.StandardResponse
+	sr.Respond(w, 200, "success", ur)
 }
 
 func LogoutUser(w http.ResponseWriter, r *http.Request) {
+	var er responses.ErrorResponse
+	var sr responses.StandardResponse
 	ctx := r.Context().Value("authContext").(*models.AuthContext)
 	id := ctx.UserId
 	t := ctx.Token
@@ -153,15 +160,20 @@ func LogoutUser(w http.ResponseWriter, r *http.Request) {
 	update := bson.M{"$pull": bson.M{"tokens": bson.D{{"token", t}}}}
 	result, err := usersCollection.UpdateOne(context.TODO(), filter, update)
 	if err != nil {
-		var er responses.ErrorResponse
 		er.Respond(w, 400, "error", err.Error())
 		return
 	}
 	if result.MatchedCount != 1 {
-		var er responses.ErrorResponse
 		er.Respond(w, 400, "error", "bad request")
 		return
 	}
-	var ur responses.StandardResponse
-	ur.Respond(w, 200, "logged out", "logout successful")
+	updatedTime := primitive.NewDateTimeFromTime(time.Now())
+	tFilter := bson.M{"_id": id}
+	tUpdate := bson.M{"$set": bson.M{"updatedAt": updatedTime}}
+	_, tUErr := usersCollection.UpdateOne(context.TODO(), tFilter, tUpdate)
+	if tUErr != nil {
+		er.Respond(w, 500, "error", "time update failed")
+		return
+	}
+	sr.Respond(w, 200, "logged out", "logout successful")
 }

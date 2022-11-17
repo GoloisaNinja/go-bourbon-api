@@ -9,6 +9,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"time"
 )
 
 type ControlStuct struct {
@@ -158,13 +159,15 @@ func UpdateController(rBody []byte, cId, uId primitive.ObjectID, cType string) (
 	var uUpdate bson.M
 	json.Unmarshal(rBody, &cr)
 	cr.FillDefaults()
+	// set an update time for records
+	updateTime := primitive.NewDateTimeFromTime(time.Now())
 	typeFilterMap := map[string][]bson.M{
-		"collection": {{"_id": uId, "collections.collection_id": cId}, {"$set": bson.M{"collections.$.collection_name": cr.Name}}},
-		"wishlist":   {{"_id": uId, "wishlists.wishlist_id": cId}, {"$set": bson.M{"wishlists.$.wishlist_name": cr.Name}}},
+		"collection": {{"_id": uId, "collections.collection_id": cId}, {"$set": bson.M{"collections.$.collection_name": cr.Name, "updatedAt": updateTime}}},
+		"wishlist":   {{"_id": uId, "wishlists.wishlist_id": cId}, {"$set": bson.M{"wishlists.$.wishlist_name": cr.Name, "updatedAt": updateTime}}},
 	}
 	// filters, updates, and opts
 	cFilter := bson.M{"_id": cId}
-	cUpdate := []bson.D{{{"$set", bson.D{{"name", cr.Name}, {"private", cr.Private}}}}}
+	cUpdate := []bson.M{{"$set": bson.M{"name": cr.Name, "private": cr.Private, "updatedAt": updateTime}}}
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
 	uFilter = typeFilterMap[cType][0]
 	uUpdate = typeFilterMap[cType][1]
@@ -223,9 +226,12 @@ func ExistsAndUpdateController(cId, bId, uId primitive.ObjectID, action, cType s
 	if action != "add" {
 		operator = "$pull"
 	}
-	cUpdate := bson.M{operator: bson.M{"bourbons": b}}                  // update for collection and wishlist bourbons array
-	filter := bson.M{"_id": cId, "user.id": uId}                        // general filter
-	opts := options.FindOneAndUpdate().SetReturnDocument(options.After) // general options
+	updateTime := primitive.NewDateTimeFromTime(time.Now())
+	// collection filter and collection update
+	filter := bson.M{"_id": cId, "user.id": uId}
+	cUpdate := bson.M{operator: bson.M{"bourbons": b}}
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	// user filter and user ref updates
 	typeQueryMap := map[string][]bson.M{
 		"collection": {{"_id": uId, "collections.collection_id": cId}, {operator: bson.M{"collections.$.bourbons": bRef}}},
 		"wishlist":   {{"_id": uId, "wishlists.wishlist_id": cId}, {operator: bson.M{"wishlists.$.bourbons": bRef}}},
@@ -241,11 +247,23 @@ func ExistsAndUpdateController(cId, bId, uId primitive.ObjectID, action, cType s
 		definedError.Build(400, "error", "action not valid")
 		return result, definedError
 	}
-
+	// update the updatedAt
+	tUpdate := bson.M{"$set": bson.M{"updatedAt": updateTime}}
+	_, tUp := collectionToUse.UpdateOne(context.TODO(), filter, tUpdate)
+	if tUp != nil {
+		definedError.Build(500, "error", "update failed")
+		return result, definedError
+	}
 	// determine the type of update needed based on action - default is adding bourbon
 	cUpErr := collectionToUse.FindOneAndUpdate(context.TODO(), filter, cUpdate, opts).Decode(&cm)
 	if cUpErr != nil {
 		definedError.Build(400, "error", cUpErr.Error())
+		return result, definedError
+	}
+	// update the user updatedAt
+	_, utUp := usersCollection.UpdateOne(context.TODO(), uFilter, tUpdate)
+	if utUp != nil {
+		definedError.Build(500, "error", "update failed")
 		return result, definedError
 	}
 	// find and update user based on collection type and action updates determined above

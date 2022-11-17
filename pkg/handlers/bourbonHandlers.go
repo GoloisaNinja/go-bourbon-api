@@ -15,11 +15,6 @@ import (
 	"strconv"
 )
 
-type BourbonsResponse struct {
-	Bourbons     []models.Bourbon `json:"bourbons"`
-	TotalRecords int              `json:"total_records"`
-}
-
 // declare and set collections to collection vars
 var bourbonsCollection = db.GetCollection(
 	db.DB,
@@ -111,7 +106,7 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var bourbons []models.Bourbon
+	var bourbons []*models.Bourbon
 	cursor, fetchErr := bourbonsCollection.Aggregate(
 		context.TODO(),
 		mongo.Pipeline{matchStage, sortStage, skipStage, limitStage},
@@ -122,7 +117,7 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 	}
 	defer cursor.Close(context.TODO())
 	for cursor.Next(context.TODO()) {
-		var bourbon models.Bourbon
+		var bourbon *models.Bourbon
 		err := cursor.Decode(&bourbon)
 		if err != nil {
 			er.Respond(w, 500, "error", err.Error())
@@ -139,7 +134,7 @@ func GetBourbons(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(bourbons) > 0 {
-		br := BourbonsResponse{
+		br := responses.BourbonsResponse{
 			Bourbons:     bourbons,
 			TotalRecords: int(count),
 		}
@@ -178,7 +173,10 @@ func GetRandomBourbon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if bourbon.Title != "" {
-		sr.Respond(w, 200, "success", bourbon)
+		br := responses.SingleBourbonResponse{
+			Bourbon: &bourbon,
+		}
+		sr.Respond(w, 200, "success", br)
 	} else {
 		err = errors.New("not found")
 		er.Respond(w, 404, "error", err.Error())
@@ -209,7 +207,10 @@ func GetBourbonById(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if bourbon.Title != "" {
-		sr.Respond(w, 200, "success", bourbon)
+		br := responses.SingleBourbonResponse{
+			Bourbon: &bourbon,
+		}
+		sr.Respond(w, 200, "success", br)
 	} else {
 		err = errors.New("not found")
 		er.Respond(w, 404, "error", err.Error())

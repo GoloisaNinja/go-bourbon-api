@@ -12,6 +12,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"io/ioutil"
 	"net/http"
+	"time"
 )
 
 var reviewsCollection = db.GetCollection(db.DB, "reviews")
@@ -197,8 +198,9 @@ func UpdateReview(w http.ResponseWriter, r *http.Request) {
 		er.Respond(w, 400, "error", "bad request")
 		return
 	}
+	updatedTime := primitive.NewDateTimeFromTime(time.Now())
 	filter := bson.M{"_id": reviewId, "user.id": userId}
-	update := bson.M{"$set": bson.M{"reviewTitle": rReq.ReviewTitle, "reviewScore": rReq.ReviewScore, "reviewText": rReq.ReviewText}}
+	update := bson.M{"$set": bson.M{"reviewTitle": rReq.ReviewTitle, "reviewScore": rReq.ReviewScore, "reviewText": rReq.ReviewText, "updatedAt": updatedTime}}
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
 	rUpErr := reviewsCollection.FindOneAndUpdate(context.TODO(), filter, update, opts).Decode(&review)
 	if rUpErr != nil {
@@ -206,7 +208,7 @@ func UpdateReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	uFilter := bson.M{"_id": userId, "reviews.review_id": reviewId}
-	uRefUpdate := bson.M{"$set": bson.M{"reviews.$.review_title": rReq.ReviewTitle}}
+	uRefUpdate := bson.M{"$set": bson.M{"reviews.$.review_title": rReq.ReviewTitle, "updatedAt": updatedTime}}
 	uRefUpErr := usersCollection.FindOneAndUpdate(context.TODO(), uFilter, uRefUpdate, opts).Decode(&user)
 	if uRefUpErr != nil {
 		er.Respond(w, 500, "error", uRefUpErr.Error())
