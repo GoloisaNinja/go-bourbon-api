@@ -44,6 +44,8 @@ func GetCollectionTypeById(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context().Value("authContext").(*models.AuthContext)
 	uId := ctx.UserId
 	var cm models.Collection
+	var cr responses.CollectionResponse
+	var wr responses.WishlistResponse
 	var sr responses.StandardResponse
 	filter := bson.M{"_id": id}
 	err := collectionToUse.FindOne(context.TODO(), filter).Decode(&cm)
@@ -55,7 +57,13 @@ func GetCollectionTypeById(w http.ResponseWriter, r *http.Request) {
 		er.Respond(w, 401, "error", "unauthorized")
 		return
 	}
-	sr.Respond(w, 200, "success", cm)
+	if cType == "collection" {
+		cr.Collection = &cm
+		sr.Respond(w, 200, "success", cr)
+	} else {
+		wr.Wishlist = &cm
+		sr.Respond(w, 200, "success", wr)
+	}
 }
 
 func GetCollectionsType(w http.ResponseWriter, r *http.Request) {
@@ -135,19 +143,21 @@ func CreateCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var cm models.Collection
-	var um models.User
+	var uCollRef models.UserCollectionRef
+	var uWishRef models.UserWishlistRef
 	var cr responses.CollectionResponse
 	var wr responses.WishlistResponse
 	var sr responses.StandardResponse
 	json.Unmarshal(controlStruct.Element, &cm)
-	json.Unmarshal(controlStruct.UserRef, &um)
 	if cType == "collection" {
+		json.Unmarshal(controlStruct.UserRef, &uCollRef)
 		cr.Collection = &cm
-		cr.UserCollections = um.Collections
+		cr.UserCollection = &uCollRef
 		sr.Respond(w, 200, "success", cr)
 	} else {
+		json.Unmarshal(controlStruct.UserRef, &uWishRef)
 		wr.Wishlist = &cm
-		wr.UserWishlists = um.Wishlists
+		wr.UserWishlist = &uWishRef
 		sr.Respond(w, 200, "success", wr)
 	}
 }
@@ -171,19 +181,21 @@ func UpdateCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var cm models.Collection
-	var um models.User
+	var uCollRef models.UserCollectionRef
+	var uWishRef models.UserWishlistRef
 	var cr responses.CollectionResponse
 	var wr responses.WishlistResponse
 	var sr responses.StandardResponse
 	json.Unmarshal(controlStuct.Element, &cm)
-	json.Unmarshal(controlStuct.UserRef, &um)
 	if cType == "collection" {
+		json.Unmarshal(controlStuct.UserRef, &uCollRef)
 		cr.Collection = &cm
-		cr.UserCollections = um.Collections
+		cr.UserCollection = &uCollRef
 		sr.Respond(w, 200, "success", cr)
 	} else {
+		json.Unmarshal(controlStuct.UserRef, &uWishRef)
 		wr.Wishlist = &cm
-		wr.UserWishlists = um.Wishlists
+		wr.UserWishlist = &uWishRef
 		sr.Respond(w, 200, "success", wr)
 	}
 }
@@ -204,17 +216,13 @@ func DeleteCollection(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context().Value("authContext").(*models.AuthContext)
 	userId := ctx.UserId
-	user, err := DeleteController(collectionId, userId, cType)
+	err := DeleteController(collectionId, userId, cType)
 	if err.Status != 0 {
 		err.Respond(w, err.Status, err.Message, err.Data)
 		return
 	}
 	var sr responses.StandardResponse
-	if cType == "collection" {
-		sr.Respond(w, 200, "success", user.Collections)
-	} else {
-		sr.Respond(w, 200, "success", user.Wishlists)
-	}
+	sr.Respond(w, 200, "success", "delete action was successful")
 }
 
 // UpdateBourbonsInCollection route relies on the auth middleware to
@@ -249,19 +257,21 @@ func UpdateBourbonsInCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var cm models.Collection
-	var um models.User
-	json.Unmarshal(controlStruct.Element, &cm)
-	json.Unmarshal(controlStruct.UserRef, &um)
+	var uCollRef models.UserCollectionRef
+	var uWishRef models.UserWishlistRef
 	var cr responses.CollectionResponse
 	var wr responses.WishlistResponse
 	var sr responses.StandardResponse
+	json.Unmarshal(controlStruct.Element, &cm)
 	if cType == "collection" {
+		json.Unmarshal(controlStruct.UserRef, uCollRef)
 		cr.Collection = &cm
-		cr.UserCollections = um.Collections
+		cr.UserCollection = &uCollRef
 		sr.Respond(w, 200, "success", cr)
 	} else {
+		json.Unmarshal(controlStruct.UserRef, uWishRef)
 		wr.Wishlist = &cm
-		wr.UserWishlists = um.Wishlists
+		wr.UserWishlist = &uWishRef
 		sr.Respond(w, 200, "success", wr)
 	}
 }

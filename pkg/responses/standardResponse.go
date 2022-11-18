@@ -41,8 +41,8 @@ type BourbonsResponse struct {
 // collection responses
 
 type CollectionResponse struct {
-	Collection      *models.Collection          `json:"collection"`
-	UserCollections []*models.UserCollectionRef `json:"user_collections"`
+	Collection     *models.Collection        `json:"collection"`
+	UserCollection *models.UserCollectionRef `json:"user_collection"`
 }
 
 type CollectionsResponse struct {
@@ -52,8 +52,8 @@ type CollectionsResponse struct {
 // wishlist responses
 
 type WishlistResponse struct {
-	Wishlist      *models.Collection        `json:"wishlist"`
-	UserWishlists []*models.UserWishlistRef `json:"user_wishlists"`
+	Wishlist     *models.Collection      `json:"wishlist"`
+	UserWishlist *models.UserWishlistRef `json:"user_wishlist"`
 }
 
 type WishlistsResponse struct {

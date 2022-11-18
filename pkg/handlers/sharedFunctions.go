@@ -41,6 +41,24 @@ func bourbonUpdateValid(b []*models.Bourbon, id primitive.ObjectID, uType string
 	return result
 }
 
+func (cs *ControlStuct) setControlStructUserRef(u *models.User, cId primitive.ObjectID, cType string) {
+	if cType == "collection" {
+		for _, collection := range u.Collections {
+			if collection.CollectionID == cId {
+				ucr, _ := json.Marshal(collection)
+				cs.UserRef = ucr
+			}
+		}
+	} else {
+		for _, wishlist := range u.Wishlists {
+			if wishlist.WishlistID == cId {
+				uwr, _ := json.Marshal(wishlist)
+				cs.UserRef = uwr
+			}
+		}
+	}
+}
+
 func CreateController(rBody []byte, uId primitive.ObjectID, uName string, cType string) (ControlStuct, responses.ErrorResponse) {
 	var result ControlStuct
 	var definedError responses.ErrorResponse
@@ -59,18 +77,19 @@ func CreateController(rBody []byte, uId primitive.ObjectID, uName string, cType 
 	var uCRef models.UserCollectionRef
 	// wishlist unique/specific userRef
 	var uWRef models.UserWishlistRef
-	// User
-	var u models.User
 	// filters, updates, and opts
 	filter := bson.M{"_id": uId}
-	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
 	json.Unmarshal(rBody, &cr)
 	cr.FillDefaults()
 	cm.Build(uId, uName, cr.Name, cr.Private)
 	if cType == "collection" {
 		uCRef.Build(cm.ID, cm.Name)
+		uCRefMarshal, _ := json.Marshal(uCRef)
+		result.UserRef = uCRefMarshal
 	} else {
 		uWRef.Build(cm.ID, cm.Name)
+		uWRefMarshal, _ := json.Marshal(uWRef)
+		result.UserRef = uWRefMarshal
 	}
 	typeQueryMap := map[string]bson.M{
 		"collection": {"$push": bson.M{"collections": uCRef}},
@@ -82,22 +101,22 @@ func CreateController(rBody []byte, uId primitive.ObjectID, uName string, cType 
 		definedError.Build(500, "error", err.Error())
 		return result, definedError
 	}
-	uErr := usersCollection.FindOneAndUpdate(context.TODO(), filter, update, opts).Decode(&u)
+	_, uErr := usersCollection.UpdateOne(context.TODO(), filter, update)
 	if uErr != nil {
 		definedError.Build(500, "error", uErr.Error())
 		return result, definedError
 	}
 	cmM, _ := json.Marshal(cm)
-	umM, _ := json.Marshal(u)
+	//umM, _ := json.Marshal(u)
 	result.Element = cmM
-	result.UserRef = umM
+	//result.UserRef = umM
+
 	return result, definedError
 }
 
 // DeleteController is a reusable function between collections and wishlists for deleting
 // both full collection or wishlist document as well as the user reference document
-func DeleteController(cId, uId primitive.ObjectID, cType string) (models.User, responses.ErrorResponse) {
-	var u models.User
+func DeleteController(cId, uId primitive.ObjectID, cType string) responses.ErrorResponse {
 	var definedError responses.ErrorResponse
 	collMap := map[string]*mongo.Collection{
 		"collection": collectionsCollection,
@@ -106,7 +125,7 @@ func DeleteController(cId, uId primitive.ObjectID, cType string) (models.User, r
 	collectionToUse := collMap[cType]
 	if collectionToUse == nil {
 		definedError.Build(400, "error", "bad request")
-		return u, definedError
+		return definedError
 	}
 	typeQueryMap := map[string]bson.M{
 		"collection": {"$pull": bson.M{"collections": bson.M{"collection_id": cId}}},
@@ -118,24 +137,24 @@ func DeleteController(cId, uId primitive.ObjectID, cType string) (models.User, r
 	result, err := collectionToUse.DeleteOne(context.TODO(), filter)
 	if err != nil {
 		definedError.Build(400, "error", err.Error())
-		return u, definedError
+		return definedError
 	}
 	// we didn't find a collection with the param collection belonging to
 	// the authorized user making the request
 	if result.DeletedCount == 0 {
 		definedError.Build(400, "error", "bad request")
-		return u, definedError
+		return definedError
 	}
 	// delete the collectionRef from the user document
 	// and return the updated user object doc
 	uFilter := bson.M{"_id": uId}
-	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
-	uUpErr := usersCollection.FindOneAndUpdate(context.TODO(), uFilter, update, opts).Decode(&u)
+	_, uUpErr := usersCollection.UpdateOne(context.TODO(), uFilter, update)
 	if uUpErr != nil {
 		definedError.Build(401, "error", "unauthorized")
-		return u, definedError
+		return definedError
 	}
-	return u, definedError
+	definedError.Build(0, "no errors", "delete success")
+	return definedError
 }
 
 func UpdateController(rBody []byte, cId, uId primitive.ObjectID, cType string) (ControlStuct, responses.ErrorResponse) {
@@ -153,8 +172,7 @@ func UpdateController(rBody []byte, cId, uId primitive.ObjectID, cType string) (
 	// collection models
 	var cr models.CollectionRequest
 	var cm models.Collection
-	// User
-	var u models.User
+	// user filters and update bsons
 	var uFilter bson.M
 	var uUpdate bson.M
 	json.Unmarshal(rBody, &cr)
@@ -177,15 +195,15 @@ func UpdateController(rBody []byte, cId, uId primitive.ObjectID, cType string) (
 		definedError.Build(400, "error", err.Error())
 		return result, definedError
 	}
+	var u models.User
 	uErr := usersCollection.FindOneAndUpdate(context.TODO(), uFilter, uUpdate, opts).Decode(&u)
 	if uErr != nil {
 		definedError.Build(400, "error", uErr.Error())
 		return result, definedError
 	}
+	result.setControlStructUserRef(&u, cId, cType)
 	cmM, _ := json.Marshal(cm)
-	umM, _ := json.Marshal(u)
 	result.Element = cmM
-	result.UserRef = umM
 	return result, definedError
 }
 
@@ -273,9 +291,8 @@ func ExistsAndUpdateController(cId, bId, uId primitive.ObjectID, action, cType s
 		definedError.Build(400, "error", uErr.Error())
 		return result, definedError
 	}
+	result.setControlStructUserRef(&u, cId, cType)
 	cMm, _ := json.Marshal(cm)
-	uMm, _ := json.Marshal(u)
 	result.Element = cMm
-	result.UserRef = uMm
 	return result, definedError
 }
