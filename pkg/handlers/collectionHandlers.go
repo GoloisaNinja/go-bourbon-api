@@ -70,6 +70,10 @@ func GetCollectionsType(w http.ResponseWriter, r *http.Request) {
 	// params id contains collection id
 	params := mux.Vars(r)
 	cType, _ := params["cType"]
+	emptyMap := map[string]string{
+		"collections": "no collections exist",
+		"wishlists":   "no wishlists exist",
+	}
 	// request cType map
 	rMap := map[string]*mongo.Collection{
 		"collections": collectionsCollection,
@@ -117,7 +121,8 @@ func GetCollectionsType(w http.ResponseWriter, r *http.Request) {
 			sr.Respond(w, 200, "success", wr)
 		}
 	} else {
-		sr.Respond(w, 404, "error", "no collections exist")
+		str := emptyMap[cType]
+		sr.Respond(w, 404, "error", str)
 	}
 }
 

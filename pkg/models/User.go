@@ -52,6 +52,7 @@ type User struct {
 }
 
 func (u *User) Build(i primitive.ObjectID, n, e, hp, t string) {
+	u.ID = i
 	u.Username = n
 	u.Email = e
 	u.Password = hp

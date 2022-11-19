@@ -57,7 +57,7 @@ type WishlistResponse struct {
 }
 
 type WishlistsResponse struct {
-	Wishlists []*models.Collection
+	Wishlists []*models.Collection `json:"wishlists"`
 }
 
 // review responses
