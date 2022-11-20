@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/db"
-	"github.com/GoloisaNinja/go-bourbon-api/pkg/helpers"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/models"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/responses"
 	"github.com/golang-jwt/jwt"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"net/http"
+	"os"
 	"regexp"
 )
 
@@ -18,6 +18,8 @@ var usersCollection = db.GetCollection(
 	db.DB,
 	"users",
 )
+
+var jwSec = os.Getenv("JWT_SECRET")
 
 func Auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(
@@ -46,7 +48,7 @@ func Auth(next http.Handler) http.Handler {
 						authErr := errors.New("unauthorized")
 						return nil, authErr
 					}
-					return []byte(helpers.GetGoDotEnv("JWT_SECRET")), nil
+					return []byte(jwSec), nil
 				},
 			)
 			if vErr != nil {

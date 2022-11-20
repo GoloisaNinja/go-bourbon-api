@@ -4,16 +4,20 @@ import (
 	"context"
 	"fmt"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/config"
-	"github.com/GoloisaNinja/go-bourbon-api/pkg/helpers"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
+	"os"
 	"time"
 )
 
 // Connection URI
-var uri = helpers.GetGoDotEnv("PROD_MONGODB_URI")
-var testUri = helpers.GetGoDotEnv("DEV_MONGODB_URI")
+//var uri = helpers.GetGoDotEnv("PROD_MONGODB_URI")
+//var testUri = helpers.GetGoDotEnv("DEV_MONGODB_URI")
+
+// production env
+var uri = os.Getenv("PROD_MONGODB_URI")
+var testUri = os.Getenv("DEV_MONGODB_URI")
 
 var app config.AppConfig
 
