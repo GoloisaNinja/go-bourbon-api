@@ -20,7 +20,7 @@ func main() {
 	originOk := handlers.AllowedOrigins([]string{"http://localhost:3000"})
 	methodsOk := handlers.AllowedMethods([]string{"PUT", "POST", "GET", "DELETE", "OPTIONS"})
 	// set port
-	port := os.Getenv("PORT")
+	port := ":" + os.Getenv("PORT")
 	if port == "" {
 		port = ":5000"
 	}
