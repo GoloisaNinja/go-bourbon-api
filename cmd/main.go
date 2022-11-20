@@ -6,7 +6,6 @@ import (
 	"github.com/gorilla/handlers"
 	"log"
 	"net/http"
-	"os"
 )
 
 func main() {
@@ -20,17 +19,17 @@ func main() {
 	originOk := handlers.AllowedOrigins([]string{"https://hellogobourbon.netlify.app", "http://localhost:3000"})
 	methodsOk := handlers.AllowedMethods([]string{"PUT", "POST", "GET", "DELETE", "OPTIONS"})
 	// set port
-	port := ":" + os.Getenv("PORT")
-	if port == "" {
-		port = ":5000"
-	}
+	//port := ":" + os.Getenv("PORT")
+	//if port == "" {
+	//	port = ":5000"
+	//}
 	// bring in the routes to serve
 	srv := &http.Server{
-		Addr:    port,
+		Addr:    ":10000",
 		Handler: handlers.CORS(originOk, headersOk, methodsOk)(routes()),
 	}
 
-	fmt.Printf("Server is up on port %s", port)
+	fmt.Println("Server is up on port 10000")
 	err := srv.ListenAndServe()
 	log.Fatal(err)
 
