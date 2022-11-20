@@ -6,6 +6,7 @@ import (
 	"github.com/gorilla/handlers"
 	"log"
 	"net/http"
+	"os"
 )
 
 func main() {
@@ -18,14 +19,14 @@ func main() {
 	headersOk := handlers.AllowedHeaders([]string{"Content-Type", "X-Requested-With", "Authorization", "Bearer", "Accept", "Accept-Language", "Origin", "Accept-Encoding", "Content-Length", "Referrer", "User-Agent"})
 	originOk := handlers.AllowedOrigins([]string{"https://hellogobourbon.netlify.app", "http://localhost:3000"})
 	methodsOk := handlers.AllowedMethods([]string{"PUT", "POST", "GET", "DELETE", "OPTIONS"})
-	// set port
-	//port := ":" + os.Getenv("PORT")
-	//if port == "" {
-	//	port = ":5000"
-	//}
+	//set port
+	port := ":" + os.Getenv("PORT")
+	if port == "" {
+		port = ":5000"
+	}
 	// bring in the routes to serve
 	srv := &http.Server{
-		Addr:    ":10000",
+		Addr:    port,
 		Handler: handlers.CORS(originOk, headersOk, methodsOk)(routes()),
 	}
 
