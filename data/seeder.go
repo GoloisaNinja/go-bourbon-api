@@ -5466,7 +5466,7 @@ func SeedDBRecords() {
 			"abv":       "55.6%",
 			"abv_value": 55.6,
 			"age":       "Unknown",
-			"age_value": "",
+			"age_value": 0,
 			"price_array": bson.A{
 				"$",
 				"$",
@@ -6080,7 +6080,7 @@ func SeedDBRecords() {
 			"abv":       "57.2%",
 			"abv_value": 57.2,
 			"age":       "Unknown",
-			"age_value": "",
+			"age_value": 0,
 			"price_array": bson.A{
 				"$",
 				"$",
@@ -6816,7 +6816,7 @@ func SeedDBRecords() {
 			"abv":       "45%",
 			"abv_value": 45,
 			"age":       "<1 Year",
-			"age_value": "",
+			"age_value": 1,
 			"price_array": bson.A{
 				"$",
 			},
@@ -17315,7 +17315,7 @@ func SeedDBRecords() {
 			"abv":       "45%",
 			"abv_value": 45,
 			"age":       "<1 Year",
-			"age_value": "",
+			"age_value": 1,
 			"price_array": bson.A{
 				"$",
 			},

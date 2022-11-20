@@ -18,7 +18,7 @@ var testUri = helpers.GetGoDotEnv("DEV_MONGODB_URI")
 var app config.AppConfig
 
 func ConnectDB() *mongo.Client {
-	app.IsProduction = false
+	app.IsProduction = true
 	var uriToUse string
 	if app.IsProduction {
 		uriToUse = uri
