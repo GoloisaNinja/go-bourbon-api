@@ -17,7 +17,7 @@ func main() {
 	//data.SeedDBRecords()
 	// cors
 	headersOk := handlers.AllowedHeaders([]string{"Content-Type", "X-Requested-With", "Authorization", "Bearer", "Accept", "Accept-Language", "Origin"})
-	originOk := handlers.AllowedOrigins([]string{"http://localhost:3000"})
+	originOk := handlers.AllowedOrigins([]string{"https://hellogobourbon.netlify.app", "http://localhost:3000"})
 	methodsOk := handlers.AllowedMethods([]string{"PUT", "POST", "GET", "DELETE", "OPTIONS"})
 	// set port
 	port := ":" + os.Getenv("PORT")
