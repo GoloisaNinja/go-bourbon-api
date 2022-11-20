@@ -6,9 +6,8 @@ import (
 	"github.com/gorilla/handlers"
 	"log"
 	"net/http"
+	"os"
 )
-
-const PORT = ":5000"
 
 func main() {
 	// Connection mongoDB
@@ -20,13 +19,18 @@ func main() {
 	headersOk := handlers.AllowedHeaders([]string{"Content-Type", "X-Requested-With", "Authorization", "Bearer", "Accept", "Accept-Language", "Origin"})
 	originOk := handlers.AllowedOrigins([]string{"http://localhost:3000"})
 	methodsOk := handlers.AllowedMethods([]string{"PUT", "POST", "GET", "DELETE", "OPTIONS"})
+	// set port
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = ":5000"
+	}
 	// bring in the routes to serve
 	srv := &http.Server{
-		Addr:    PORT,
+		Addr:    port,
 		Handler: handlers.CORS(originOk, headersOk, methodsOk)(routes()),
 	}
 
-	fmt.Printf("Server is up on port %s", PORT)
+	fmt.Printf("Server is up on port %s", port)
 	err := srv.ListenAndServe()
 	log.Fatal(err)
 

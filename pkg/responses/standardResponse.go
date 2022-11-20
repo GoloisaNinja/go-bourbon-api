@@ -63,6 +63,10 @@ type WishlistsResponse struct {
 // review responses
 
 type ReviewResponse struct {
-	Review      *models.UserReview      `json:"review"`
-	UserReviews []*models.UserReviewRef `json:"user_reviews"`
+	Review     *models.UserReview    `json:"review"`
+	UserReview *models.UserReviewRef `json:"user_review"`
+}
+
+type ReviewsResponse struct {
+	Reviews []*models.UserReview `json:"reviews"`
 }

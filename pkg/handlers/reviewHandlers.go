@@ -17,6 +17,7 @@ import (
 
 var reviewsCollection = db.GetCollection(db.DB, "reviews")
 
+// GetReviewById returns a single review based on the REVIEW ID passed in url params
 func GetReviewById(w http.ResponseWriter, r *http.Request) {
 	var review models.UserReview
 	var er responses.ErrorResponse
@@ -40,8 +41,9 @@ func GetReviewById(w http.ResponseWriter, r *http.Request) {
 // of userreview models
 func GetAllReviewsByFilterId(w http.ResponseWriter, r *http.Request) {
 	var er responses.ErrorResponse
+	var rr responses.ReviewsResponse
 	var sr responses.StandardResponse
-	var reviews []models.UserReview
+	var reviews []*models.UserReview
 	params := mux.Vars(r)
 	filterType := params["fType"]
 	id, bErr := primitive.ObjectIDFromHex(params["id"])
@@ -63,7 +65,7 @@ func GetAllReviewsByFilterId(w http.ResponseWriter, r *http.Request) {
 	}
 	defer cursor.Close(context.TODO())
 	for cursor.Next(context.TODO()) {
-		var review models.UserReview
+		var review *models.UserReview
 		err := cursor.Decode(&review)
 		if err != nil {
 			er.Respond(w, 500, "error", err.Error())
@@ -75,7 +77,8 @@ func GetAllReviewsByFilterId(w http.ResponseWriter, r *http.Request) {
 		er.Respond(w, 500, "error", curErr.Error())
 	}
 	if len(reviews) > 0 {
-		sr.Respond(w, 200, "success", reviews)
+		rr.Reviews = reviews
+		sr.Respond(w, 200, "success", rr)
 	} else {
 		er.Respond(w, 404, "error", "not found")
 	}
@@ -83,8 +86,6 @@ func GetAllReviewsByFilterId(w http.ResponseWriter, r *http.Request) {
 
 func CreateReview(w http.ResponseWriter, r *http.Request) {
 	var er responses.ErrorResponse
-	// user models
-	var user models.User
 	// review models
 	var rRef models.UserReviewRef
 	var review models.UserReview
@@ -129,20 +130,18 @@ func CreateReview(w http.ResponseWriter, r *http.Request) {
 	rRef.ReviewTitle = review.ReviewTitle
 	uFilter := bson.M{"_id": userId}
 	uUpdate := bson.M{"$push": bson.M{"reviews": rRef}}
-	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
-	uErr := usersCollection.FindOneAndUpdate(context.TODO(), uFilter, uUpdate, opts).Decode(&user)
+	_, uErr := usersCollection.UpdateOne(context.TODO(), uFilter, uUpdate)
 	if uErr != nil {
 		er.Respond(w, 500, "error", uErr.Error())
 		return
 	}
 	rr.Review = &review
-	rr.UserReviews = user.Reviews
+	rr.UserReview = &rRef
 	sr.Respond(w, 200, "success", rr)
 }
 
 func DeleteReview(w http.ResponseWriter, r *http.Request) {
 	var er responses.ErrorResponse
-	var user models.User
 	var sr responses.StandardResponse
 	params := mux.Vars(r)
 	reviewId, err := primitive.ObjectIDFromHex(params["id"])
@@ -164,21 +163,20 @@ func DeleteReview(w http.ResponseWriter, r *http.Request) {
 	}
 	rFilter := bson.M{"_id": userId, "reviews.review_id": reviewId}
 	rUpdate := bson.M{"$pull": bson.M{"reviews": bson.M{"review_id": reviewId}}}
-	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
-	uErr := usersCollection.FindOneAndUpdate(context.TODO(), rFilter, rUpdate, opts).Decode(&user)
+	_, uErr := usersCollection.UpdateOne(context.TODO(), rFilter, rUpdate)
 	if uErr != nil {
 		er.Respond(w, 500, "error", uErr.Error())
 		return
 	}
-	sr.Respond(w, 200, "success", user.Reviews)
+	sr.Respond(w, 200, "success", "delete review was successful")
 }
 
 func UpdateReview(w http.ResponseWriter, r *http.Request) {
 	var er responses.ErrorResponse
 	var rReq models.ReviewRequest
 	var review models.UserReview
-	var user models.User
 	var rr responses.ReviewResponse
+	var uRRef models.UserReviewRef
 	var sr responses.StandardResponse
 	params := mux.Vars(r)
 	reviewId, err := primitive.ObjectIDFromHex(params["id"])
@@ -198,6 +196,10 @@ func UpdateReview(w http.ResponseWriter, r *http.Request) {
 		er.Respond(w, 400, "error", "bad request")
 		return
 	}
+	// user review ref construction for the response
+	uRRef.ReviewID = reviewId
+	uRRef.ReviewTitle = rReq.ReviewTitle
+	// update time for db
 	updatedTime := primitive.NewDateTimeFromTime(time.Now())
 	filter := bson.M{"_id": reviewId, "user.id": userId}
 	update := bson.M{"$set": bson.M{"reviewTitle": rReq.ReviewTitle, "reviewScore": rReq.ReviewScore, "reviewText": rReq.ReviewText, "updatedAt": updatedTime}}
@@ -209,12 +211,12 @@ func UpdateReview(w http.ResponseWriter, r *http.Request) {
 	}
 	uFilter := bson.M{"_id": userId, "reviews.review_id": reviewId}
 	uRefUpdate := bson.M{"$set": bson.M{"reviews.$.review_title": rReq.ReviewTitle, "updatedAt": updatedTime}}
-	uRefUpErr := usersCollection.FindOneAndUpdate(context.TODO(), uFilter, uRefUpdate, opts).Decode(&user)
+	_, uRefUpErr := usersCollection.UpdateOne(context.TODO(), uFilter, uRefUpdate)
 	if uRefUpErr != nil {
 		er.Respond(w, 500, "error", uRefUpErr.Error())
 		return
 	}
 	rr.Review = &review
-	rr.UserReviews = user.Reviews
+	rr.UserReview = &uRRef
 	sr.Respond(w, 200, "success", rr)
 }
