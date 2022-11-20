@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/db"
-	"github.com/GoloisaNinja/go-bourbon-api/pkg/helpers"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/models"
 	"github.com/GoloisaNinja/go-bourbon-api/pkg/responses"
 	"github.com/golang-jwt/jwt"
@@ -15,6 +14,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -24,13 +24,15 @@ var usersCollection = db.GetCollection(
 	"users",
 )
 
+var jwtSec = os.Getenv("JWT_SECRET")
+
 type JWTCustomClaims struct {
 	UserId string
 	jwt.StandardClaims
 }
 
 func GenerateAuthToken(userId string) (string, error) {
-	jwtSecret := []byte(helpers.GetGoDotEnv("JWT_SECRET"))
+	jwtSecret := []byte(jwtSec)
 	t := time.Now()
 	claims := JWTCustomClaims{
 		userId,
