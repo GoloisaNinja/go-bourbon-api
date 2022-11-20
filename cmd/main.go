@@ -16,7 +16,7 @@ func main() {
 	// Optional Initial Seed of Db
 	//data.SeedDBRecords()
 	// cors
-	headersOk := handlers.AllowedHeaders([]string{"Content-Type", "X-Requested-With", "Authorization", "Bearer", "Accept", "Accept-Language", "Origin"})
+	headersOk := handlers.AllowedHeaders([]string{"Content-Type", "X-Requested-With", "Authorization", "Bearer", "Accept", "Accept-Language", "Origin", "Accept-Encoding", "Content-Length", "Referrer", "User-Agent"})
 	originOk := handlers.AllowedOrigins([]string{"https://hellogobourbon.netlify.app", "http://localhost:3000"})
 	methodsOk := handlers.AllowedMethods([]string{"PUT", "POST", "GET", "DELETE", "OPTIONS"})
 	// set port
